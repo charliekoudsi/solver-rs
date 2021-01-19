@@ -1,0 +1,17 @@
+[package]
+name = "solver-rs"
+version = "0.1.0"
+authors = ["Charlie Koudsi <charlie@thecarfactory.net>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hand_eval = { path = "../hand-eval" }
+serde = {version="1.0.119", features = ["derive"]}
+bincode = "1.3.1"
+rayon = "1.5.0"
+crossbeam-channel = "0.5.0"
+
+[profile.release]
+debug = true
