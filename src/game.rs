@@ -1,65 +1,156 @@
-use hand_eval::{Card, Hand, Rank, Rankable};
-use std::cmp::min;
+use hand_eval::{Hand, Rankable};
 
-pub const NUM_INTERNAL: usize = 226;
-pub const NUM_TERMINAL: usize = 257;
+const STATES: (usize, usize) = get_sequences(10, 75);
+pub const NUM_INTERNAL: usize = STATES.0;
+pub const NUM_TERMINAL: usize = STATES.1;
 const STARTING_STACK: usize = 80;
+pub const TOTAL_ACTIONS: usize = 3;
+pub const P1_SIZES: [[(usize, usize); 1]; 3] = [[(1, 2)], [(1, 2)], [(1, 2)]];
+pub const P2_SIZES: [[(usize, usize); 1]; 3] = [[(1, 2)], [(1, 2)], [(1, 2)]];
 
-// pub struct PlayerView {
-//     hole: [Card; 2],
-//     board: Vec<Card>,
-// }
+const fn get_sequences(pot: usize, stack: usize) -> (usize, usize) {
+    let mut internal = 0;
+    let mut terminal = 0;
+    count_sequences(
+        0,
+        0,
+        0,
+        true,
+        pot,
+        stack,
+        &mut internal,
+        &mut terminal,
+        &P1_SIZES,
+        &P2_SIZES,
+    );
+    return (internal, terminal);
+}
 
-// impl PlayerView {
-//     pub fn new(hole1: Card, board: Option<usize>) -> PlayerView {
-//         if let Some(board) = board {
-//             return PlayerView {
-//                 hole,
-//                 board: board as i32,
-//             };
-//         }
-//         return PlayerView { hole, Vec::new() };
-//     }
+const fn count_sequences<const P1: usize, const P2: usize>(
+    player: usize,
+    round: usize,
+    raise: usize,
+    first_action: bool,
+    pot: usize,
+    stack: usize,
+    internal: &mut usize,
+    terminal: &mut usize,
+    p1_sizes: &[[(usize, usize); P1]; 3],
+    p2_sizes: &[[(usize, usize); P2]; 3],
+) {
+    let opponent = 1 - player;
+    *internal += 1;
+    if stack > 0 {
+        if player == 0 {
+            let mut i = 0;
+            while i < P1 {
+                let size = p1_sizes[round][i];
+                let raise_size = (pot + raise) * size.0 / size.1;
+                if stack > raise_size {
+                    count_sequences(
+                        opponent,
+                        round,
+                        raise_size,
+                        false,
+                        pot + raise + raise_size,
+                        stack - raise_size,
+                        internal,
+                        terminal,
+                        p1_sizes,
+                        p2_sizes,
+                    );
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            if i < P1 {
+                count_sequences(
+                    opponent,
+                    round,
+                    stack,
+                    false,
+                    pot + raise + stack,
+                    0,
+                    internal,
+                    terminal,
+                    p1_sizes,
+                    p2_sizes,
+                );
+            }
+        } else {
+            let mut i = 0;
+            while i < P2 {
+                let size = p2_sizes[round][i];
+                let raise_size = (pot + raise) * size.0 / size.1;
+                if stack > raise_size {
+                    count_sequences(
+                        opponent,
+                        round,
+                        raise_size,
+                        false,
+                        pot + raise + raise_size,
+                        stack - raise_size,
+                        internal,
+                        terminal,
+                        p1_sizes,
+                        p2_sizes,
+                    );
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            if i < P2 {
+                count_sequences(
+                    opponent,
+                    round,
+                    stack,
+                    false,
+                    pot + raise + stack,
+                    0,
+                    internal,
+                    terminal,
+                    p1_sizes,
+                    p2_sizes,
+                );
+            }
+        }
+    }
 
-//     #[inline(always)]
-//     pub fn get_hand(&self) -> usize {
-//         if self.board == -1 {
-//             return self.hole;
-//         }
-//         return 3 * self.hole + self.board as usize;
-//     }
-// }
+    if first_action {
+        // if stack > 0 {
+        count_sequences(
+            opponent, round, raise, false, pot, stack, internal, terminal, p1_sizes, p2_sizes,
+        );
+    // }
+    } else {
+        if round == 2 {
+            *terminal += 1;
+        } else {
+            if stack > 0 {
+                count_sequences(
+                    0,
+                    round + 1,
+                    0,
+                    true,
+                    pot + raise,
+                    stack,
+                    internal,
+                    terminal,
+                    p1_sizes,
+                    p2_sizes,
+                );
+            } else {
+                *terminal += 1;
+            }
+        }
+    }
 
-// pub struct Abstraction;
-
-// impl Abstraction {
-//     const PREFLOP: [usize; 3] = [0, 1, 2];
-//     const FLOP: [usize; 9] = [0, 1, 2, 3, 4, 5, 6, 7, 8];
-
-//     #[inline(always)]
-//     pub fn abstract_view(&self, view: &PlayerView) -> usize {
-//         if view.board == -1 {
-//             return Abstraction::PREFLOP[view.get_hand()];
-//         }
-
-//         return Abstraction::FLOP[view.get_hand()];
-//     }
-
-//     pub fn can_extend(&self, pre: usize, post: usize) -> bool {
-//         for i in 0..3 {
-//             let pf_view = PlayerView::new(i, None);
-//             if self.abstract_view(&pf_view) == pre {
-//                 for j in 0..3 {
-//                     let f_view = PlayerView::new(i, Some(j));
-//                     if self.abstract_view(&f_view) == post {
-//                         return true;
-//                     }
-//                 }
-//             }
-//         }
-//         return false;
-//     }
-// }
+    if raise != 0 {
+        *terminal += 1;
+    }
+}
 
 pub struct Game {
     pub rounds: [usize; NUM_INTERNAL],
@@ -67,20 +158,22 @@ pub struct Game {
     winner: [isize; NUM_TERMINAL],
     win_amount: [usize; NUM_TERMINAL],
     num_actions: [usize; NUM_INTERNAL],
-    pub transition: [[isize; 3]; NUM_INTERNAL],
-    parent: [usize; NUM_INTERNAL + NUM_TERMINAL],
+    pub transition: [[isize; TOTAL_ACTIONS]; NUM_INTERNAL],
+    pub parent: [usize; NUM_INTERNAL + NUM_TERMINAL],
 }
 
 impl Game {
     pub fn new() -> Game {
         let mut internal: usize = 0;
         let mut terminal: usize = 0;
+        println!("{} {}", NUM_INTERNAL, NUM_TERMINAL);
         let mut rounds: [usize; NUM_INTERNAL] = [0; NUM_INTERNAL];
         let mut whose_turn: [usize; NUM_INTERNAL] = [0; NUM_INTERNAL];
         let mut winner: [isize; NUM_TERMINAL] = [0; NUM_TERMINAL];
         let mut win_amount: [usize; NUM_TERMINAL] = [0; NUM_TERMINAL];
         let mut num_actions: [usize; NUM_INTERNAL] = [0; NUM_INTERNAL];
-        let mut transition: [[isize; 3]; NUM_INTERNAL] = [[0; 3]; NUM_INTERNAL];
+        let mut transition: [[isize; TOTAL_ACTIONS]; NUM_INTERNAL] =
+            [[-1; TOTAL_ACTIONS]; NUM_INTERNAL];
         let mut parent: [usize; NUM_INTERNAL + NUM_TERMINAL] = [0; NUM_TERMINAL + NUM_INTERNAL];
         construct_sequences(
             0,
@@ -98,6 +191,8 @@ impl Game {
             &mut parent,
             &mut internal,
             &mut terminal,
+            &P1_SIZES,
+            &P2_SIZES,
         );
         return Game {
             rounds,
@@ -169,7 +264,7 @@ impl Game {
     }
 }
 
-fn construct_sequences(
+fn construct_sequences<const P1: usize, const P2: usize>(
     player: usize,
     round: usize,
     raise: usize,
@@ -181,10 +276,12 @@ fn construct_sequences(
     winner: &mut [isize],
     win_amount: &mut [usize],
     num_actions: &mut [usize],
-    transition: &mut [[isize; 3]],
+    transition: &mut [[isize; TOTAL_ACTIONS]],
     parent: &mut [usize],
     internal: &mut usize,
     terminal: &mut usize,
+    p1_sizes: &[[(usize, usize); P1]; 3],
+    p2_sizes: &[[(usize, usize); P2]; 3],
 ) -> usize {
     let u = *internal;
     *internal += 1;
@@ -194,30 +291,121 @@ fn construct_sequences(
 
     let opponent = 1 - player;
     if stack > 0 {
-        num_actions[u] += 1;
-        let raise_size = min((pot + raise) / 2, stack);
-        let v = construct_sequences(
-            opponent,
-            round,
-            raise_size,
-            false,
-            pot + raise + raise_size,
-            stack - raise_size,
-            rounds,
-            whose_turn,
-            winner,
-            win_amount,
-            num_actions,
-            transition,
-            parent,
-            internal,
-            terminal,
-        );
-
-        transition[u][0] = v as isize;
-        parent[v] = u;
-    } else {
-        transition[u][0] = -1;
+        if player == 0 {
+            let mut i = 0;
+            while i < P1 {
+                let size = p1_sizes[round][i];
+                let raise_size = (pot + raise) * size.0 / size.1;
+                if stack > raise_size {
+                    num_actions[u] += 1;
+                    let v = construct_sequences(
+                        opponent,
+                        round,
+                        raise_size,
+                        false,
+                        pot + raise + raise_size,
+                        stack - raise_size,
+                        rounds,
+                        whose_turn,
+                        winner,
+                        win_amount,
+                        num_actions,
+                        transition,
+                        parent,
+                        internal,
+                        terminal,
+                        p1_sizes,
+                        p2_sizes,
+                    );
+                    transition[u][i] = v as isize;
+                    parent[v] = u;
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            if i < P1 {
+                num_actions[u] += 1;
+                let v = construct_sequences(
+                    opponent,
+                    round,
+                    stack,
+                    false,
+                    pot + raise + stack,
+                    0,
+                    rounds,
+                    whose_turn,
+                    winner,
+                    win_amount,
+                    num_actions,
+                    transition,
+                    parent,
+                    internal,
+                    terminal,
+                    p1_sizes,
+                    p2_sizes,
+                );
+                transition[u][i] = v as isize;
+                parent[v] = u;
+            }
+        } else {
+            let mut i = 0;
+            while i < P2 {
+                let size = p2_sizes[round][i];
+                let raise_size = (pot + raise) * size.0 / size.1;
+                if stack > raise_size {
+                    num_actions[u] += 1;
+                    let v = construct_sequences(
+                        opponent,
+                        round,
+                        raise_size,
+                        false,
+                        pot + raise + raise_size,
+                        stack - raise_size,
+                        rounds,
+                        whose_turn,
+                        winner,
+                        win_amount,
+                        num_actions,
+                        transition,
+                        parent,
+                        internal,
+                        terminal,
+                        p1_sizes,
+                        p2_sizes,
+                    );
+                    transition[u][i] = v as isize;
+                    parent[v] = u;
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            if i < P2 {
+                num_actions[u] += 1;
+                let v = construct_sequences(
+                    opponent,
+                    round,
+                    stack,
+                    false,
+                    pot + raise + stack,
+                    0,
+                    rounds,
+                    whose_turn,
+                    winner,
+                    win_amount,
+                    num_actions,
+                    transition,
+                    parent,
+                    internal,
+                    terminal,
+                    p1_sizes,
+                    p2_sizes,
+                );
+                transition[u][i] = v as isize;
+                parent[v] = u;
+            }
+        }
     }
 
     if first_action {
@@ -237,8 +425,10 @@ fn construct_sequences(
             parent,
             internal,
             terminal,
+            p1_sizes,
+            p2_sizes,
         );
-        transition[u][1] = v as isize;
+        transition[u][TOTAL_ACTIONS - 2] = v as isize;
         parent[v] = u;
     } else {
         if round == 2 {
@@ -246,10 +436,10 @@ fn construct_sequences(
             *terminal += 1;
             winner[v] = -1;
             win_amount[v] = pot + raise + stack - STARTING_STACK;
-            transition[u][1] = (v as isize) + (NUM_INTERNAL as isize);
+            transition[u][TOTAL_ACTIONS - 2] = (v as isize) + (NUM_INTERNAL as isize);
             parent[v + NUM_INTERNAL] = u;
         } else {
-            if stack > 0 || raise != 0 {
+            if stack > 0 {
                 let v = construct_sequences(
                     0,
                     round + 1,
@@ -266,15 +456,18 @@ fn construct_sequences(
                     parent,
                     internal,
                     terminal,
+                    p1_sizes,
+                    p2_sizes,
                 );
-                transition[u][1] = v as isize;
+                transition[u][TOTAL_ACTIONS - 2] = v as isize;
                 parent[v] = u;
             } else {
                 let v = *terminal;
                 *terminal += 1;
                 winner[v] = -1;
                 win_amount[v] = pot + raise + stack - STARTING_STACK;
-                transition[u][1] = (v as isize) + (NUM_INTERNAL as isize);
+                transition[u][TOTAL_ACTIONS - 2] = (v as isize) + (NUM_INTERNAL as isize);
+                parent[v + NUM_INTERNAL] = u;
             }
         }
     }
@@ -285,10 +478,10 @@ fn construct_sequences(
         *terminal += 1;
         winner[v] = opponent as isize;
         win_amount[v] = pot + stack - STARTING_STACK;
-        transition[u][2] = (v + NUM_INTERNAL) as isize;
+        transition[u][TOTAL_ACTIONS - 1] = (v + NUM_INTERNAL) as isize;
         parent[v + NUM_INTERNAL] = u;
     } else {
-        transition[u][2] = -1;
+        transition[u][TOTAL_ACTIONS - 1] = -1;
     }
 
     return u;
@@ -305,4 +498,102 @@ pub fn evaluate_winner(p1: (u8, u8), p2: (u8, u8), board: &[u8; 5]) -> i8 {
         return -1;
     }
     return 0;
+}
+
+#[inline]
+fn get_river_bucket(one: u8, two: u8, flop: &[u8; 3], turn: u8, river: u8) -> usize {
+    let mut baseline = {
+        if river > flop[2] {
+            river - 3
+        } else if river > flop[1] {
+            river - 2
+        } else if river > flop[0] {
+            river - 1
+        } else {
+            river
+        }
+    };
+    if river > turn {
+        baseline -= 1;
+    }
+    if river > two {
+        (baseline - 2) as usize
+    } else if river > one {
+        (baseline - 1) as usize
+    } else {
+        baseline as usize
+    }
+}
+
+// #[inline]
+// fn get_river_buckets(
+//     p1_one: u8,
+//     p1_two: u8,
+//     p2_one: u8,
+//     p2_two: u8,
+//     flop: &[u8; 3],
+//     turn: u8,
+//     river: u8,
+// ) -> (usize, usize) {
+//     let p1 = get_river_bucket(p1_one, p1_two, flop, turn, river);
+//     let p2 = get_river_bucket(p2_one, p2_two, flop, turn, river);
+//     return (p1, p2);
+// }
+
+#[inline]
+pub fn get_turn_bucket(one: u8, two: u8, flop: &[u8; 3], turn: u8) -> usize {
+    let baseline = {
+        if turn > flop[2] {
+            turn - 3
+        } else if turn > flop[1] {
+            turn - 2
+        } else if turn > flop[0] {
+            turn - 1
+        } else {
+            turn
+        }
+    };
+    if turn > two {
+        (baseline - 2) as usize
+    } else if turn > one {
+        (baseline - 1) as usize
+    } else {
+        baseline as usize
+    }
+}
+
+// #[inline]
+// fn get_turn_buckets(
+//     p1_one: u8,
+//     p1_two: u8,
+//     p2_one: u8,
+//     p2_two: u8,
+//     flop: &[u8; 3],
+//     turn: u8,
+// ) -> (usize, usize) {
+//     let p1 = get_turn_bucket(p1_one, p1_two, flop, turn);
+//     let p2 = get_turn_bucket(p2_one, p2_two, flop, turn);
+//     return (p1, p2);
+// }
+
+#[inline]
+pub fn get_bucket(one: u8, two: u8, flop: &[u8; 3], turn: u8, river: u8) -> (usize, usize) {
+    let turn_b = get_turn_bucket(one, two, flop, turn);
+    let river_b = get_river_bucket(one, two, flop, turn, river);
+    return (turn_b, river_b);
+}
+
+#[inline]
+pub fn get_buckets(
+    p1_one: u8,
+    p1_two: u8,
+    p2_one: u8,
+    p2_two: u8,
+    flop: &[u8; 3],
+    turn: u8,
+    river: u8,
+) -> ((usize, usize), (usize, usize)) {
+    let p1 = get_bucket(p1_one, p1_two, flop, turn, river);
+    let p2 = get_bucket(p2_one, p2_two, flop, turn, river);
+    return ((p1.0, p2.0), (p1.1, p2.1));
 }

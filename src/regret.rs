@@ -1,21 +1,17 @@
-use crate::game::{Game, NUM_INTERNAL};
-use crossbeam_channel::Sender;
-use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
+use crate::game::{Game, NUM_INTERNAL, TOTAL_ACTIONS};
+use std::marker::PhantomData;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
-pub struct RegretStrategy {
-    regret: Vec<Vec<[f64; 3]>>,
-    pub average_probability: Vec<Vec<[f64; 3]>>,
+pub struct SafeRegretStrategy {
+    pub regret: Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+    pub average_probability: Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+    pub updates: Vec<Vec<usize>>,
 }
 
-impl RegretStrategy {
-    pub fn new(player: usize, g: &Game, combos: usize) -> RegretStrategy {
-        let mut regret = vec![vec![[0.0; 3]]; NUM_INTERNAL];
-        // let mut regret: [Vec<[f64; 3]>; NUM_INTERNAL] = array_init::array_init(|_| vec![[0.0; 3]]);
-        // let mut average_probability: [Vec<[f64; 3]>; NUM_INTERNAL] =
-        //     array_init::array_init(|_| vec![[0.0; 3]]);
-        let mut average_probability = vec![vec![[0.0; 3]]; NUM_INTERNAL];
+impl SafeRegretStrategy {
+    pub fn new(g: &Game, player: usize, combos: usize) -> Self {
+        let mut regret = vec![vec![[0.0; TOTAL_ACTIONS]]; NUM_INTERNAL];
+        let mut average_probability = vec![vec![[0.0; TOTAL_ACTIONS]]; NUM_INTERNAL];
+        let mut updates = vec![vec![0]; NUM_INTERNAL];
         for i in 0..NUM_INTERNAL {
             if g.get_whose_turn(i) == player {
                 let n;
@@ -27,51 +23,21 @@ impl RegretStrategy {
                     n = combos * 31 * 30;
                 }
 
-                regret[i] = vec![[0.0; 3]; n];
-                average_probability[i] = vec![[0.0; 3]; n];
+                regret[i] = vec![[0.0; TOTAL_ACTIONS]; n];
+                average_probability[i] = vec![[0.0; TOTAL_ACTIONS]; n];
+                updates[i] = vec![0; n];
             }
         }
-        return RegretStrategy {
+        return Self {
             regret,
             average_probability,
+            updates,
         };
     }
 
     #[inline(always)]
-    fn get_regret(&mut self, u: usize, bucket: usize) -> &mut [f64; 3] {
-        return &mut self.regret[u][bucket];
-    }
-
-    #[inline(always)]
-    fn get_average_probability(&mut self, u: usize, bucket: usize) -> &mut [f64; 3] {
-        return &mut self.average_probability[u][bucket];
-    }
-
-    #[inline]
-    fn get_probability(&self, u: usize, bucket: usize, g: &Game) -> [f64; 3] {
-        let mut probability = [0.0; 3];
-        let mut regret_sum = 0.0;
-
-        for i in 0..3 {
-            regret_sum += self.regret[u][bucket][i].max(0.0);
-        }
-
-        if regret_sum > 1e-7 {
-            for i in 0..3 {
-                probability[i] = self.regret[u][bucket][i].max(0.0) / regret_sum;
-            }
-            return probability;
-        }
-
-        let p = 1.0 / (g.get_num_actions(u) as f64);
-
-        for i in 0..3 {
-            if g.can_do_action(i, u) {
-                probability[i] = p;
-            }
-        }
-
-        return probability;
+    fn get_average_probability(&self, u: usize, bucket: usize) -> &[f64; TOTAL_ACTIONS] {
+        return &self.average_probability[u][bucket];
     }
 
     #[inline]
@@ -80,23 +46,164 @@ impl RegretStrategy {
         u: usize,
         bucket: usize,
         g: &Game,
-    ) -> [f64; 3] {
+    ) -> [f64; TOTAL_ACTIONS] {
         let mut prob_sum = 0.0;
-        let mut probability = [0.0; 3];
-
-        for i in 0..3 {
-            prob_sum += self.average_probability[u][bucket][i];
+        let mut probability = [0.0; TOTAL_ACTIONS];
+        let average_probability = self.get_average_probability(u, bucket);
+        for i in 0..TOTAL_ACTIONS {
+            prob_sum += average_probability[i];
         }
 
         if prob_sum > 1e-7 {
-            for i in 0..3 {
-                probability[i] = self.average_probability[u][bucket][i] / prob_sum;
+            for i in 0..TOTAL_ACTIONS {
+                probability[i] = average_probability[i] / prob_sum;
             }
             return probability;
         }
 
         let p = 1.0 / (g.get_num_actions(u) as f64);
-        for i in 0..3 {
+        for i in 0..TOTAL_ACTIONS {
+            if g.can_do_action(i, u) {
+                probability[i] = p;
+            }
+        }
+        return probability;
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RegretStrategy<'a> {
+    regret: *mut Vec<[f64; TOTAL_ACTIONS]>,
+    average_probability: *mut Vec<[f64; TOTAL_ACTIONS]>,
+    updates: *mut Vec<usize>,
+    lifetime: PhantomData<&'a f64>,
+}
+
+unsafe impl<'a> Send for RegretStrategy<'a> {}
+
+impl<'a> RegretStrategy<'a> {
+    pub fn new(
+        regret: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+        average_probability: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+        updates: &'a mut Vec<Vec<usize>>,
+    ) -> (
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+    ) {
+        return (
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+        );
+    }
+
+    #[inline(always)]
+    unsafe fn get_regret(&mut self, u: usize, bucket: usize) -> &mut [f64; TOTAL_ACTIONS] {
+        return &mut *((*self.regret.offset(u as isize))
+            .as_mut_ptr()
+            .offset(bucket as isize));
+    }
+
+    #[inline(always)]
+    unsafe fn get_num_updates(&mut self, u: usize, bucket: usize) -> usize {
+        let update = (*self.updates.offset(u as isize))
+            .as_mut_ptr()
+            .offset(bucket as isize);
+        *update += 1;
+        return *update - 1;
+    }
+
+    #[inline(always)]
+    unsafe fn get_average_probability(
+        &mut self,
+        u: usize,
+        bucket: usize,
+    ) -> &mut [f64; TOTAL_ACTIONS] {
+        return &mut *((*self.average_probability.offset(u as isize))
+            .as_mut_ptr()
+            .offset(bucket as isize));
+    }
+
+    // self does not to be mut
+    #[inline]
+    unsafe fn get_probability(
+        &mut self,
+        u: usize,
+        bucket: usize,
+        g: &Game,
+    ) -> [f64; TOTAL_ACTIONS] {
+        let mut probability = [0.0; TOTAL_ACTIONS];
+        let mut regret_sum = 0.0;
+        let regret = self.get_regret(u, bucket);
+        for i in 0..TOTAL_ACTIONS {
+            regret_sum += regret[i].max(0.0);
+        }
+
+        if regret_sum > 1e-7 {
+            for i in 0..TOTAL_ACTIONS {
+                probability[i] = regret[i].max(0.0) / regret_sum;
+            }
+            return probability;
+        }
+
+        let p = 1.0 / (g.get_num_actions(u) as f64);
+
+        for i in 0..TOTAL_ACTIONS {
+            if g.can_do_action(i, u) {
+                probability[i] = p;
+            }
+        }
+
+        return probability;
+    }
+
+    // self does not to be mut
+    #[inline]
+    pub unsafe fn get_average_normalized_probability(
+        &mut self,
+        u: usize,
+        bucket: usize,
+        g: &Game,
+    ) -> [f64; TOTAL_ACTIONS] {
+        let mut prob_sum = 0.0;
+        let mut probability = [0.0; TOTAL_ACTIONS];
+        let average_probability = self.get_average_probability(u, bucket);
+        for i in 0..TOTAL_ACTIONS {
+            prob_sum += average_probability[i];
+        }
+
+        if prob_sum > 1e-7 {
+            for i in 0..TOTAL_ACTIONS {
+                probability[i] = average_probability[i] / prob_sum;
+            }
+            return probability;
+        }
+
+        let p = 1.0 / (g.get_num_actions(u) as f64);
+        for i in 0..TOTAL_ACTIONS {
             if g.can_do_action(i, u) {
                 probability[i] = p;
             }
@@ -105,27 +212,26 @@ impl RegretStrategy {
     }
 
     #[inline(always)]
-    fn update_avg_prob(&mut self, reach: f64, u: usize, bucket: usize, g: &Game) {
+    unsafe fn update_avg_prob(&mut self, reach: f64, u: usize, bucket: usize, g: &Game) {
         let probability = self.get_probability(u, bucket, g);
         let avg_prob = self.get_average_probability(u, bucket);
-        for i in 0..3 {
+        for i in 0..TOTAL_ACTIONS {
             avg_prob[i] += reach * probability[i];
         }
     }
 }
 
-pub fn update_regret(
+pub unsafe fn update_regret(
     u: usize,
     buckets: &[[usize; 3]; 2],
     result: i8,
     reach: &mut [f64; 2],
     chance: f64,
     ev: &mut [f64; 2],
-    cfr: &mut [f64; 2],
     strat: &mut [RegretStrategy; 2],
-    // strat: Arc<Mutex<[RegretStrategy; 2]>>,
     g: &Game,
 ) {
+    // println!("update");
     if g.is_terminal(u) {
         let amount = g.get_win_amount(u);
 
@@ -148,24 +254,14 @@ pub fn update_regret(
         let player = g.get_whose_turn(u);
         let opponent = 1 - player;
         let round = g.get_round(u);
-        // {
-        //     let mut guard = strat.lock().unwrap();
-        //     let protected = &mut *guard;
-        //     protected[player].update_avg_prob(reach[player], u, buckets[player][round], g);
-        // }
         strat[player].update_avg_prob(reach[player], u, buckets[player][round], g);
 
         let mut util = 0.0;
         let mut regret_sum = 0.0;
         let old_reach = reach[player];
-        let mut delta_regret = [0.0; 3];
-        // let probability = {
-        //     let mut guard = strat.lock().unwrap();
-        //     let protected = &mut *guard;
-        //     protected[player].get_probability(u, buckets[player][round], g)
-        // };
+        let mut delta_regret = [0.0; TOTAL_ACTIONS];
         let probability = strat[player].get_probability(u, buckets[player][round], g);
-        for i in 0..3 {
+        for i in 0..TOTAL_ACTIONS {
             if g.can_do_action(i, u) {
                 reach[player] = old_reach * probability[i];
                 // let strategy = Arc::clone(&strat);
@@ -176,7 +272,6 @@ pub fn update_regret(
                     reach,
                     chance,
                     ev,
-                    cfr,
                     strat,
                     g,
                 );
@@ -187,43 +282,14 @@ pub fn update_regret(
         }
 
         reach[player] = old_reach;
-
-        // let mut regret = {
-        //     let mut guard = strat.lock().unwrap();
-        //     let protected = &mut *guard;
-        //     protected[player]
-        //         .get_regret(u, buckets[player][round])
-        //         .to_owned()
-        // };
         let regret = strat[player].get_regret(u, buckets[player][round]);
-        for i in 0..3 {
+        for i in 0..TOTAL_ACTIONS {
             if g.can_do_action(i, u) {
                 delta_regret[i] -= util;
                 regret[i] += delta_regret[i];
-                cfr[player] += delta_regret[i].max(0.0);
             }
         }
         ev[player] = util;
         ev[opponent] = regret_sum;
     }
 }
-
-// pub fn rewrite(
-//     // u: usize,
-//     // buckets: &[[usize; 3]; 2],
-//     // result: i8,
-//     // reach: &mut [f64; 2],
-//     // chance: f64,
-//     // ev: &mut [f64; 2],
-//     // cfr: &mut [f64; 2],
-//     // sender: Sender<(f64, usize, usize)>,
-//     // strat: Arc<Mutex<[RegretStrategy; 2]>>,
-//     g: &Game,
-// ) {
-//     let mut u = 0;
-//     while !g.is_terminal(u) {
-//         let player = g.get_whose_turn(u);
-//         let opponent = 1 - player;
-//         let round = g.get_round(u);
-//     }
-// }
