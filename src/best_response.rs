@@ -10,6 +10,8 @@ pub struct BestResponse {
     player: usize,
     pub terminal_probs: TerminalProb,
     range: Range,
+    opp_range: Range,
+    opp_combos: Vec<u8>,
     flop: [u8; 3],
 }
 
@@ -231,8 +233,30 @@ fn compute_river_probabilities(
     }
 }
 
+fn compute_opp_combos(range: &Range, opp_range: &Range) -> Vec<u8> {
+    let mut combos = vec![0; range.len()];
+    for i in 0..range.len() {
+        let mut opp_combos = 0;
+        let (card1, card2) = range[i];
+        for (opp1, opp2) in opp_range.iter() {
+            if *opp1 != card1 && *opp1 != card2 && *opp2 != card1 && *opp2 != card2 {
+                opp_combos += 1;
+            }
+        }
+        combos[i] = opp_combos;
+    }
+    return combos;
+}
+
 impl BestResponse {
-    pub fn new(p: usize, strat: &RegretStrategy, g: &Game, range: Range, flop: [u8; 3]) -> Self {
+    pub fn new(
+        p: usize,
+        strat: &RegretStrategy,
+        g: &Game,
+        range: Range,
+        opp_range: Range,
+        flop: [u8; 3],
+    ) -> Self {
         let mut probability: TerminalProb = array_init::array_init(|_| vec![0.0]);
         for i in 0..NUM_TERMINAL {
             if g.get_round(i + NUM_INTERNAL) == 0 {
@@ -244,23 +268,20 @@ impl BestResponse {
             }
         }
         compute_terminal_probabilities(1 - p, &flop, strat, &mut probability, g, &range);
+        let opp_combos = compute_opp_combos(&range, &opp_range);
         return Self {
             player: p,
             terminal_probs: probability,
             range,
+            opp_range,
+            opp_combos,
             flop,
         };
     }
 
-    fn compute_chance_prob(&self, round: usize, hand: (u8, u8), opp_range: &Range) -> f64 {
+    fn compute_chance_prob(&self, round: usize, hand_bucket: usize) -> f64 {
         let combos = self.range.len() as f64;
-        let mut opp_combos = 0;
-        for (card1, card2) in opp_range {
-            if *card1 != hand.0 && *card1 != hand.1 && *card2 != hand.0 && *card2 != hand.1 {
-                opp_combos += 1;
-            }
-        }
-        let opp_combos = opp_combos as f64;
+        let opp_combos = self.opp_combos[hand_bucket] as f64;
         if round == 0 {
             return 1.0 / (combos * opp_combos);
         } else if round == 1 {
@@ -274,7 +295,6 @@ impl BestResponse {
         u: usize,
         g: &Game,
         strat: &mut RegretStrategy,
-        opp_range: &Range,
         hand: Option<usize>,
         turn: Option<(usize, usize)>,
         river: Option<(usize, usize)>,
@@ -289,9 +309,9 @@ impl BestResponse {
                     let r = r as u8;
                     let board = [self.flop[0], self.flop[1], self.flop[2], t, r];
                     let h = self.range[h_bucket];
-                    let chance = self.compute_chance_prob(2, h, opp_range);
-                    for i in 0..opp_range.len() {
-                        let (card1, card2) = opp_range[i];
+                    let chance = self.compute_chance_prob(2, h_bucket);
+                    for i in 0..self.opp_range.len() {
+                        let (card1, card2) = self.opp_range[i];
                         if card1 != t
                             && card2 != t
                             && card1 != r
@@ -315,7 +335,7 @@ impl BestResponse {
                     let h_bucket = hand.expect("Reached showdown, but no hand provided");
                     let h = self.range[h_bucket];
                     let t = t as u8;
-                    let chance = self.compute_chance_prob(2, h, opp_range);
+                    let chance = self.compute_chance_prob(2, h_bucket);
                     for j in 0..36 {
                         if j == self.flop[0]
                             || j == self.flop[1]
@@ -327,8 +347,8 @@ impl BestResponse {
                             continue;
                         }
                         let board = [self.flop[0], self.flop[1], self.flop[2], t, j];
-                        for i in 0..opp_range.len() {
-                            let (card1, card2) = opp_range[i];
+                        for i in 0..self.opp_range.len() {
+                            let (card1, card2) = self.opp_range[i];
                             if card1 != t
                                 && card2 != t
                                 && card1 != j
@@ -351,7 +371,7 @@ impl BestResponse {
                 } else {
                     let h_bucket = hand.expect("Reached showdown, but no hand provided");
                     let h = self.range[h_bucket];
-                    let chance = self.compute_chance_prob(2, h, opp_range);
+                    let chance = self.compute_chance_prob(2, h_bucket);
                     let mut t = 0;
                     for k in 0..36 {
                         if k == self.flop[0]
@@ -374,8 +394,8 @@ impl BestResponse {
                                 continue;
                             }
                             let board = [self.flop[0], self.flop[1], self.flop[2], k, j];
-                            for i in 0..opp_range.len() {
-                                let (card1, card2) = opp_range[i];
+                            for i in 0..self.opp_range.len() {
+                                let (card1, card2) = self.opp_range[i];
                                 if card1 != j
                                     && card2 != j
                                     && card1 != k
@@ -411,9 +431,9 @@ impl BestResponse {
                 if g.get_round(u) == 0 {
                     let h_bucket = hand.expect("Reached fold, but no hand provided");
                     let h = self.range[h_bucket];
-                    let chance = self.compute_chance_prob(0, h, opp_range);
-                    for i in 0..opp_range.len() {
-                        let (card1, card2) = opp_range[i];
+                    let chance = self.compute_chance_prob(0, h_bucket);
+                    for i in 0..self.opp_range.len() {
+                        let (card1, card2) = self.opp_range[i];
                         if card1 != h.0 && card1 != h.1 && card2 != h.0 && card2 != h.1 {
                             p += self.terminal_probs[u - NUM_INTERNAL][i] * chance;
                         }
@@ -423,9 +443,9 @@ impl BestResponse {
                     let (_, t) = turn.expect("Reached fold, but no turn provided");
                     let t = t as u8;
                     let h = self.range[h_bucket];
-                    let chance = self.compute_chance_prob(1, h, opp_range);
-                    for i in 0..opp_range.len() {
-                        let (card1, card2) = opp_range[i];
+                    let chance = self.compute_chance_prob(1, h_bucket);
+                    for i in 0..self.opp_range.len() {
+                        let (card1, card2) = self.opp_range[i];
                         if card1 != h.0
                             && card1 != h.1
                             && card2 != h.0
@@ -444,9 +464,9 @@ impl BestResponse {
                     let (_, r) = river.expect("Reached fold, but no river provided");
                     let r = r as u8;
                     let h = self.range[h_bucket];
-                    let chance = self.compute_chance_prob(2, h, opp_range);
-                    for i in 0..opp_range.len() {
-                        let (card1, card2) = opp_range[i];
+                    let chance = self.compute_chance_prob(2, h_bucket);
+                    for i in 0..self.opp_range.len() {
+                        let (card1, card2) = self.opp_range[i];
                         if card1 != h.0
                             && card1 != h.1
                             && card2 != h.0
@@ -467,7 +487,7 @@ impl BestResponse {
         } else if hand == None {
             let mut v = 0.0;
             for i in 0..self.range.len() {
-                v += self.compute_best_response(u, g, strat, opp_range, Some(i), None, None);
+                v += self.compute_best_response(u, g, strat, Some(i), None, None);
             }
             return v;
         } else if g.get_round(u) == 1 && turn == None {
@@ -484,15 +504,7 @@ impl BestResponse {
                 {
                     continue;
                 }
-                v += self.compute_best_response(
-                    u,
-                    g,
-                    strat,
-                    opp_range,
-                    hand,
-                    Some((t, i as usize)),
-                    None,
-                );
+                v += self.compute_best_response(u, g, strat, hand, Some((t, i as usize)), None);
                 t += 1;
             }
             return v;
@@ -513,15 +525,7 @@ impl BestResponse {
                 {
                     continue;
                 }
-                v += self.compute_best_response(
-                    u,
-                    g,
-                    strat,
-                    opp_range,
-                    hand,
-                    turn,
-                    Some((r, i as usize)),
-                );
+                v += self.compute_best_response(u, g, strat, hand, turn, Some((r, i as usize)));
                 r += 1;
             }
             return v;
@@ -534,7 +538,6 @@ impl BestResponse {
                         g.do_action(i, u) as usize,
                         g,
                         strat,
-                        opp_range,
                         hand,
                         turn,
                         river,
@@ -567,7 +570,6 @@ impl BestResponse {
                         g.do_action(i, u) as usize,
                         g,
                         strat,
-                        opp_range,
                         hand,
                         turn,
                         river,
