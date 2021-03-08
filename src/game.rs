@@ -1,6 +1,6 @@
 use hand_eval::{Hand, Rankable};
 
-const STATES: (usize, usize) = get_sequences(10, 75);
+pub const STATES: (usize, usize) = get_sequences(10, 75);
 pub const NUM_INTERNAL: usize = STATES.0;
 pub const NUM_TERMINAL: usize = STATES.1;
 const STARTING_STACK: usize = 80;
@@ -22,6 +22,9 @@ const fn get_sequences(pot: usize, stack: usize) -> (usize, usize) {
         &mut terminal,
         &P1_SIZES,
         &P2_SIZES,
+        true,
+        Some(1),
+        0,
     );
     return (internal, terminal);
 }
@@ -37,13 +40,31 @@ const fn count_sequences<const P1: usize, const P2: usize>(
     terminal: &mut usize,
     p1_sizes: &[[(usize, usize); P1]; 3],
     p2_sizes: &[[(usize, usize); P2]; 3],
+    no_donk: bool,
+    aggressor: Option<usize>,
+    num_bets: usize,
 ) {
     let opponent = 1 - player;
     *internal += 1;
     if stack > 0 {
         if player == 0 {
+            let halted: bool = {
+                if no_donk {
+                    if let Some(a) = aggressor {
+                        if a == 1 && first_action {
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
             let mut i = 0;
-            while i < P1 {
+            while i < P1 && !halted {
                 let size = p1_sizes[round][i];
                 let raise_size = (pot + raise) * size.0 / size.1;
                 if stack > raise_size {
@@ -58,6 +79,9 @@ const fn count_sequences<const P1: usize, const P2: usize>(
                         terminal,
                         p1_sizes,
                         p2_sizes,
+                        no_donk,
+                        Some(player),
+                        num_bets + 1,
                     );
                     i += 1;
                 } else {
@@ -76,6 +100,9 @@ const fn count_sequences<const P1: usize, const P2: usize>(
                     terminal,
                     p1_sizes,
                     p2_sizes,
+                    no_donk,
+                    Some(player),
+                    num_bets + 1,
                 );
             }
         } else {
@@ -95,6 +122,9 @@ const fn count_sequences<const P1: usize, const P2: usize>(
                         terminal,
                         p1_sizes,
                         p2_sizes,
+                        no_donk,
+                        Some(player),
+                        num_bets + 1,
                     );
                     i += 1;
                 } else {
@@ -113,6 +143,9 @@ const fn count_sequences<const P1: usize, const P2: usize>(
                     terminal,
                     p1_sizes,
                     p2_sizes,
+                    no_donk,
+                    Some(player),
+                    num_bets + 1,
                 );
             }
         }
@@ -122,6 +155,7 @@ const fn count_sequences<const P1: usize, const P2: usize>(
         // if stack > 0 {
         count_sequences(
             opponent, round, raise, false, pot, stack, internal, terminal, p1_sizes, p2_sizes,
+            no_donk, aggressor, num_bets,
         );
     // }
     } else {
@@ -129,18 +163,39 @@ const fn count_sequences<const P1: usize, const P2: usize>(
             *terminal += 1;
         } else {
             if stack > 0 {
-                count_sequences(
-                    0,
-                    round + 1,
-                    0,
-                    true,
-                    pot + raise,
-                    stack,
-                    internal,
-                    terminal,
-                    p1_sizes,
-                    p2_sizes,
-                );
+                if num_bets == 0 {
+                    count_sequences(
+                        0,
+                        round + 1,
+                        0,
+                        true,
+                        pot + raise,
+                        stack,
+                        internal,
+                        terminal,
+                        p1_sizes,
+                        p2_sizes,
+                        no_donk,
+                        None,
+                        0,
+                    );
+                } else {
+                    count_sequences(
+                        0,
+                        round + 1,
+                        0,
+                        true,
+                        pot + raise,
+                        stack,
+                        internal,
+                        terminal,
+                        p1_sizes,
+                        p2_sizes,
+                        no_donk,
+                        Some(opponent),
+                        0,
+                    );
+                }
             } else {
                 *terminal += 1;
             }
