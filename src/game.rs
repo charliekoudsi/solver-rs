@@ -218,7 +218,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new() -> Game {
+    pub fn new(no_donk: bool, aggressor: usize) -> Game {
         let mut internal: usize = 0;
         let mut terminal: usize = 0;
         println!("{} {}", NUM_INTERNAL, NUM_TERMINAL);
@@ -248,6 +248,9 @@ impl Game {
             &mut terminal,
             &P1_SIZES,
             &P2_SIZES,
+            no_donk,
+            Some(aggressor),
+            0,
         );
         return Game {
             rounds,
@@ -337,6 +340,9 @@ fn construct_sequences<const P1: usize, const P2: usize>(
     terminal: &mut usize,
     p1_sizes: &[[(usize, usize); P1]; 3],
     p2_sizes: &[[(usize, usize); P2]; 3],
+    no_donk: bool,
+    aggressor: Option<usize>,
+    num_bets: usize,
 ) -> usize {
     let u = *internal;
     *internal += 1;
@@ -347,8 +353,23 @@ fn construct_sequences<const P1: usize, const P2: usize>(
     let opponent = 1 - player;
     if stack > 0 {
         if player == 0 {
+            let halted: bool = {
+                if no_donk {
+                    if let Some(a) = aggressor {
+                        if a == 1 && first_action {
+                            true
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
             let mut i = 0;
-            while i < P1 {
+            while i < P1 && !halted {
                 let size = p1_sizes[round][i];
                 let raise_size = (pot + raise) * size.0 / size.1;
                 if stack > raise_size {
@@ -371,6 +392,9 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                         terminal,
                         p1_sizes,
                         p2_sizes,
+                        no_donk,
+                        Some(player),
+                        num_bets + 1,
                     );
                     transition[u][i] = v as isize;
                     parent[v] = u;
@@ -399,6 +423,9 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                     terminal,
                     p1_sizes,
                     p2_sizes,
+                    no_donk,
+                    Some(player),
+                    num_bets + 1,
                 );
                 transition[u][i] = v as isize;
                 parent[v] = u;
@@ -428,6 +455,9 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                         terminal,
                         p1_sizes,
                         p2_sizes,
+                        no_donk,
+                        Some(player),
+                        num_bets + 1,
                     );
                     transition[u][i] = v as isize;
                     parent[v] = u;
@@ -456,6 +486,9 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                     terminal,
                     p1_sizes,
                     p2_sizes,
+                    no_donk,
+                    Some(player),
+                    num_bets + 1,
                 );
                 transition[u][i] = v as isize;
                 parent[v] = u;
@@ -482,6 +515,9 @@ fn construct_sequences<const P1: usize, const P2: usize>(
             terminal,
             p1_sizes,
             p2_sizes,
+            no_donk,
+            aggressor,
+            num_bets,
         );
         transition[u][TOTAL_ACTIONS - 2] = v as isize;
         parent[v] = u;
@@ -495,27 +531,57 @@ fn construct_sequences<const P1: usize, const P2: usize>(
             parent[v + NUM_INTERNAL] = u;
         } else {
             if stack > 0 {
-                let v = construct_sequences(
-                    0,
-                    round + 1,
-                    0,
-                    true,
-                    pot + raise,
-                    stack,
-                    rounds,
-                    whose_turn,
-                    winner,
-                    win_amount,
-                    num_actions,
-                    transition,
-                    parent,
-                    internal,
-                    terminal,
-                    p1_sizes,
-                    p2_sizes,
-                );
-                transition[u][TOTAL_ACTIONS - 2] = v as isize;
-                parent[v] = u;
+                if num_bets == 0 {
+                    let v = construct_sequences(
+                        0,
+                        round + 1,
+                        0,
+                        true,
+                        pot + raise,
+                        stack,
+                        rounds,
+                        whose_turn,
+                        winner,
+                        win_amount,
+                        num_actions,
+                        transition,
+                        parent,
+                        internal,
+                        terminal,
+                        p1_sizes,
+                        p2_sizes,
+                        no_donk,
+                        None,
+                        0,
+                    );
+                    transition[u][TOTAL_ACTIONS - 2] = v as isize;
+                    parent[v] = u;
+                } else {
+                    let v = construct_sequences(
+                        0,
+                        round + 1,
+                        0,
+                        true,
+                        pot + raise,
+                        stack,
+                        rounds,
+                        whose_turn,
+                        winner,
+                        win_amount,
+                        num_actions,
+                        transition,
+                        parent,
+                        internal,
+                        terminal,
+                        p1_sizes,
+                        p2_sizes,
+                        no_donk,
+                        Some(opponent),
+                        0,
+                    );
+                    transition[u][TOTAL_ACTIONS - 2] = v as isize;
+                    parent[v] = u;
+                }
             } else {
                 let v = *terminal;
                 *terminal += 1;
