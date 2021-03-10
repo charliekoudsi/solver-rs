@@ -2,6 +2,8 @@ use hand_eval::{Hand, Rankable};
 
 const STARTING_STACK: usize = 195;
 pub const STARTING_POT: usize = 11;
+pub const NO_DONK: bool = true;
+const AGGRESSOR: usize = 1;
 const STATES: (usize, usize) = get_sequences(STARTING_POT, STARTING_STACK);
 pub const NUM_INTERNAL: usize = STATES.0;
 pub const NUM_TERMINAL: usize = STATES.1;
@@ -23,8 +25,8 @@ const fn get_sequences(pot: usize, stack: usize) -> (usize, usize) {
         &mut terminal,
         &P1_SIZES,
         &P2_SIZES,
-        true,
-        Some(1),
+        NO_DONK,
+        Some(AGGRESSOR),
         0,
     );
     return (internal, terminal);
@@ -89,7 +91,7 @@ const fn count_sequences<const P1: usize, const P2: usize>(
                     break;
                 }
             }
-            if i < P1 {
+            if i < P1 && !halted {
                 count_sequences(
                     opponent,
                     round,
@@ -219,7 +221,7 @@ pub struct Game {
 }
 
 impl Game {
-    pub fn new(no_donk: bool, aggressor: usize) -> Game {
+    pub fn new() -> Game {
         let mut internal: usize = 0;
         let mut terminal: usize = 0;
         println!("{} {}", NUM_INTERNAL, NUM_TERMINAL);
@@ -249,8 +251,8 @@ impl Game {
             &mut terminal,
             &P1_SIZES,
             &P2_SIZES,
-            no_donk,
-            Some(aggressor),
+            NO_DONK,
+            Some(AGGRESSOR),
             0,
         );
         return Game {
@@ -404,7 +406,7 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                     break;
                 }
             }
-            if i < P1 {
+            if i < P1 && !halted {
                 num_actions[u] += 1;
                 let v = construct_sequences(
                     opponent,

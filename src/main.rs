@@ -3,7 +3,7 @@ mod best_response;
 mod game;
 mod regret;
 use best_response::BestResponse;
-use game::{evaluate_winner, get_buckets, Game};
+use game::{evaluate_winner, get_buckets, Game, NO_DONK};
 use hand_eval::Card;
 use hand_eval::{gen_ranges, Isomorph};
 use rand::{seq::SliceRandom, thread_rng};
@@ -167,8 +167,7 @@ fn train(
 }
 
 fn main() {
-    // panic!("{} {}", internal, terminal);
-    let g = Game::new(true, 1);
+    let g = Game::new();
     println!("{:?}", g.transition[0]);
     let flop = [2, 15, 19];
     let combos = [
@@ -244,18 +243,20 @@ fn main() {
                     &g
                 )
             );
-            println!(
-                "P2 vs. Bet {}{}{}{}: {:?}",
-                card1.value.to_char(),
-                card1.suit.to_char(),
-                card2.value.to_char(),
-                card2.suit.to_char(),
-                strat_1[1].get_average_normalized_probability(
-                    g.transition[0][0].try_into().unwrap(),
-                    i,
-                    &g
-                )
-            );
+            if !NO_DONK {
+                println!(
+                    "P2 vs. Bet {}{}{}{}: {:?}",
+                    card1.value.to_char(),
+                    card1.suit.to_char(),
+                    card2.value.to_char(),
+                    card2.suit.to_char(),
+                    strat_1[1].get_average_normalized_probability(
+                        g.transition[0][0].try_into().unwrap(),
+                        i,
+                        &g
+                    )
+                );
+            }
             i += 1;
             // let encoded: Vec<u8> = bincode::serialize(&strat.lock().unwrap()[0]).unwrap();
             // let mut file = File::create("test").unwrap();
