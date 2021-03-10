@@ -1,9 +1,10 @@
 use crate::game::{
-    evaluate_winner, get_bucket, get_turn_bucket, Game, NUM_INTERNAL, NUM_TERMINAL, TOTAL_ACTIONS,
+    evaluate_winner, get_bucket, get_turn_bucket, Game, NUM_INTERNAL, NUM_TERMINAL, STARTING_POT,
+    TOTAL_ACTIONS,
 };
 use crate::regret::SafeRegretStrategy as RegretStrategy;
 
-type TerminalProb = [Vec<f64>; NUM_TERMINAL];
+type TerminalProb = Vec<Vec<f64>>;
 type Range = Vec<(u8, u8)>;
 
 pub struct BestResponse {
@@ -257,7 +258,7 @@ impl BestResponse {
         opp_range: Range,
         flop: [u8; 3],
     ) -> Self {
-        let mut probability: TerminalProb = array_init::array_init(|_| vec![0.0]);
+        let mut probability: TerminalProb = vec![vec![0.0; 1]; NUM_TERMINAL];
         for i in 0..NUM_TERMINAL {
             if g.get_round(i + NUM_INTERNAL) == 0 {
                 probability[i] = vec![0.0; range.len()];
@@ -324,11 +325,15 @@ impl BestResponse {
                             let (t_b, r_b) = get_bucket(card1, card2, &self.flop, t, r);
                             let p = self.terminal_probs[u - NUM_INTERNAL]
                                 [(i * 31 + t_b) * 30 + r_b as usize];
-                            ev += (evaluate_winner(h, (card1, card2), &board) as isize
-                                * g.get_win_amount(u) as isize)
-                                as f64
-                                * p
-                                * chance
+                            let winner = evaluate_winner(h, (card1, card2), &board) as isize;
+                            let amount = g.get_win_amount(u);
+                            if winner == 1 {
+                                ev += amount as f64 * p * chance
+                            } else if winner == -1 {
+                                ev += (-1 * (amount - STARTING_POT) as isize) as f64 * p * chance;
+                            } else {
+                                ev += STARTING_POT as f64 / 2.0 * p * chance;
+                            }
                         }
                     }
                 } else if let Some((_, t)) = turn {
@@ -360,11 +365,16 @@ impl BestResponse {
                             {
                                 let t_b = get_turn_bucket(card1, card2, &self.flop, t);
                                 let p = self.terminal_probs[u - NUM_INTERNAL][i * 31 + t_b];
-                                ev += (evaluate_winner(h, (card1, card2), &board) as isize
-                                    * g.get_win_amount(u) as isize)
-                                    as f64
-                                    * p
-                                    * chance
+                                let winner = evaluate_winner(h, (card1, card2), &board) as isize;
+                                let amount = g.get_win_amount(u);
+                                if winner == 1 {
+                                    ev += amount as f64 * p * chance
+                                } else if winner == -1 {
+                                    ev +=
+                                        (-1 * (amount - STARTING_POT) as isize) as f64 * p * chance;
+                                } else {
+                                    ev += STARTING_POT as f64 / 2.0 * p * chance;
+                                }
                             }
                         }
                     }
@@ -406,11 +416,18 @@ impl BestResponse {
                                     && card2 != h.1
                                 {
                                     let p = self.terminal_probs[u - NUM_INTERNAL][i];
-                                    ev += (evaluate_winner(h, (card1, card2), &board) as isize
-                                        * g.get_win_amount(u) as isize)
-                                        as f64
-                                        * p
-                                        * chance;
+                                    let winner =
+                                        evaluate_winner(h, (card1, card2), &board) as isize;
+                                    let amount = g.get_win_amount(u);
+                                    if winner == 1 {
+                                        ev += amount as f64 * p * chance
+                                    } else if winner == -1 {
+                                        ev += (-1 * (amount - STARTING_POT) as isize) as f64
+                                            * p
+                                            * chance;
+                                    } else {
+                                        ev += STARTING_POT as f64 / 2.0 * p * chance;
+                                    }
                                 }
                             }
                             r += 1;
@@ -482,7 +499,11 @@ impl BestResponse {
                         }
                     }
                 }
-                return p * (result * g.get_win_amount(u) as isize) as f64;
+                if result == 1 {
+                    return p * g.get_win_amount(u) as f64;
+                } else {
+                    return p * (-1 * (g.get_win_amount(u) - STARTING_POT) as isize) as f64;
+                }
             }
         } else if hand == None {
             let mut v = 0.0;
