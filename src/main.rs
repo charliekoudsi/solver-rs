@@ -317,12 +317,12 @@ fn main() {
     let best_resp = BestResponse::new(0, &safe_2, &g, range1.clone(), range2.clone(), flop.clone());
     println!("computing br");
     let time = Instant::now();
-    let val = best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None);
+    let val = best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
     println!("{} ({})", val, time.elapsed().as_secs_f64());
 
     let mut best_resp_strat = SafeRegretStrategy::new(&g, 1, range2.len());
     let best_resp = BestResponse::new(1, &safe_1, &g, range2.clone(), range1.clone(), flop.clone());
     let time = Instant::now();
-    let val = best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None);
+    let val = best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
     println!("{} ({})", val, time.elapsed().as_secs_f64());
 }

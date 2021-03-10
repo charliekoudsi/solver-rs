@@ -1,8 +1,8 @@
 use crate::game::{
-    evaluate_winner, get_bucket, get_turn_bucket, Game, NUM_INTERNAL, NUM_TERMINAL, STARTING_POT,
-    TOTAL_ACTIONS,
+    get_bucket, get_turn_bucket, Game, NUM_INTERNAL, NUM_TERMINAL, STARTING_POT, TOTAL_ACTIONS,
 };
 use crate::regret::SafeRegretStrategy as RegretStrategy;
+use std::collections::HashMap;
 
 type TerminalProb = Vec<Vec<f64>>;
 type Range = Vec<(u8, u8)>;
@@ -299,6 +299,7 @@ impl BestResponse {
         hand: Option<usize>,
         turn: Option<(usize, usize)>,
         river: Option<(usize, usize)>,
+        map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
     ) -> f64 {
         if g.is_terminal(u) {
             if g.is_showdown(u) {
@@ -308,7 +309,6 @@ impl BestResponse {
                     let (_, t) = turn.expect("Reached showdown, but no turn provided");
                     let t = t as u8;
                     let r = r as u8;
-                    let board = [self.flop[0], self.flop[1], self.flop[2], t, r];
                     let h = self.range[h_bucket];
                     let chance = self.compute_chance_prob(2, h_bucket);
                     for i in 0..self.opp_range.len() {
@@ -325,7 +325,7 @@ impl BestResponse {
                             let (t_b, r_b) = get_bucket(card1, card2, &self.flop, t, r);
                             let p = self.terminal_probs[u - NUM_INTERNAL]
                                 [(i * 31 + t_b) * 30 + r_b as usize];
-                            let winner = evaluate_winner(h, (card1, card2), &board) as isize;
+                            let winner = *map.get(&(h, (card1, card2), t, r)).expect("not set");
                             let amount = g.get_win_amount(u);
                             if winner == 1 {
                                 ev += amount as f64 * p * chance
@@ -351,7 +351,6 @@ impl BestResponse {
                         {
                             continue;
                         }
-                        let board = [self.flop[0], self.flop[1], self.flop[2], t, j];
                         for i in 0..self.opp_range.len() {
                             let (card1, card2) = self.opp_range[i];
                             if card1 != t
@@ -365,7 +364,7 @@ impl BestResponse {
                             {
                                 let t_b = get_turn_bucket(card1, card2, &self.flop, t);
                                 let p = self.terminal_probs[u - NUM_INTERNAL][i * 31 + t_b];
-                                let winner = evaluate_winner(h, (card1, card2), &board) as isize;
+                                let winner = *map.get(&(h, (card1, card2), t, j)).expect("not set");
                                 let amount = g.get_win_amount(u);
                                 if winner == 1 {
                                     ev += amount as f64 * p * chance
@@ -403,7 +402,6 @@ impl BestResponse {
                             {
                                 continue;
                             }
-                            let board = [self.flop[0], self.flop[1], self.flop[2], k, j];
                             for i in 0..self.opp_range.len() {
                                 let (card1, card2) = self.opp_range[i];
                                 if card1 != j
@@ -417,7 +415,7 @@ impl BestResponse {
                                 {
                                     let p = self.terminal_probs[u - NUM_INTERNAL][i];
                                     let winner =
-                                        evaluate_winner(h, (card1, card2), &board) as isize;
+                                        *map.get(&(h, (card1, card2), k, j)).expect("not set");
                                     let amount = g.get_win_amount(u);
                                     if winner == 1 {
                                         ev += amount as f64 * p * chance
@@ -508,7 +506,7 @@ impl BestResponse {
         } else if hand == None {
             let mut v = 0.0;
             for i in 0..self.range.len() {
-                v += self.compute_best_response(u, g, strat, Some(i), None, None);
+                v += self.compute_best_response(u, g, strat, Some(i), None, None, map);
             }
             return v;
         } else if g.get_round(u) == 1 && turn == None {
@@ -525,7 +523,8 @@ impl BestResponse {
                 {
                     continue;
                 }
-                v += self.compute_best_response(u, g, strat, hand, Some((t, i as usize)), None);
+                v +=
+                    self.compute_best_response(u, g, strat, hand, Some((t, i as usize)), None, map);
                 t += 1;
             }
             return v;
@@ -546,7 +545,8 @@ impl BestResponse {
                 {
                     continue;
                 }
-                v += self.compute_best_response(u, g, strat, hand, turn, Some((r, i as usize)));
+                v +=
+                    self.compute_best_response(u, g, strat, hand, turn, Some((r, i as usize)), map);
                 r += 1;
             }
             return v;
@@ -562,6 +562,7 @@ impl BestResponse {
                         hand,
                         turn,
                         river,
+                        map,
                     );
                     if v > max_val {
                         max_val = v;
@@ -594,6 +595,7 @@ impl BestResponse {
                         hand,
                         turn,
                         river,
+                        map,
                     );
                 }
             }
