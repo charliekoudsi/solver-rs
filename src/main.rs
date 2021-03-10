@@ -8,7 +8,7 @@ use hand_eval::Card;
 use hand_eval::{gen_ranges, Isomorph};
 use rand::{seq::SliceRandom, thread_rng};
 use regret::{update_regret, RegretStrategy, SafeRegretStrategy};
-use std::{convert::TryInto, time::Instant};
+use std::{collections::HashMap, convert::TryInto, time::Instant};
 
 fn single_thread_train(
     g: &Game,
@@ -18,6 +18,7 @@ fn single_thread_train(
     range2: &Vec<(u8, u8)>,
     min_i: usize,
     max_i: usize,
+    map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
 ) -> ([f64; 2], usize) {
     let mut global_ev = [0.0; 2];
     let mut combos = 0;
@@ -88,11 +89,13 @@ fn single_thread_train(
                     //     );
                     // }
                     let board = [flop[0], flop[1], flop[2], turn, river];
-                    let result = evaluate_winner((p1_one, p1_two), (p2_one, p2_two), &board);
+                    let result = map
+                        .get(&((p1_one, p1_two), (p2_one, p2_two), turn, river))
+                        .expect("outcome was not set");
                     let mut ev = [0.0; 2];
                     let mut reach = [1.0; 2];
                     unsafe {
-                        update_regret(0, &buckets, result, &mut reach, 1.0, &mut ev, strat, g);
+                        update_regret(0, &buckets, *result, &mut reach, 1.0, &mut ev, strat, g);
                     }
                     global_ev[0] += ev[0];
                     global_ev[1] += ev[1];
@@ -113,12 +116,13 @@ fn train(
     flop: &[u8; 3],
     range1: &Vec<(u8, u8)>,
     range2: &Vec<(u8, u8)>,
+    map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
 ) -> f64 {
     let start = Instant::now();
     // let combos = range1.len();
     let v = crossbeam::scope(|scope| {
         let a = scope.spawn(move |_| {
-            return single_thread_train(g, strat_1, flop, range1, range2, 0, range1.len() / 4);
+            return single_thread_train(g, strat_1, flop, range1, range2, 0, range1.len() / 4, map);
         });
         let b = scope.spawn(move |_| {
             return single_thread_train(
@@ -129,6 +133,7 @@ fn train(
                 range2,
                 range1.len() / 4,
                 range1.len() / 2,
+                map,
             );
         });
         let c = scope.spawn(move |_| {
@@ -140,6 +145,7 @@ fn train(
                 range2,
                 range1.len() / 2,
                 range1.len() * 3 / 4,
+                map,
             );
         });
         let d = single_thread_train(
@@ -150,6 +156,7 @@ fn train(
             range2,
             range1.len() * 3 / 4,
             range1.len(),
+            map,
         );
         let a = a.join().unwrap();
         let b = b.join().unwrap();
@@ -204,6 +211,46 @@ fn main() {
     let mut strat_3 = [regret_1.2, regret_2.2];
     let mut strat_4 = [regret_1.3, regret_2.3];
     let mut total = 0.0;
+    let mut map: HashMap<((u8, u8), (u8, u8), u8, u8), i8> = HashMap::new();
+    let mut board = [flop[0], flop[1], flop[2], 0, 0];
+    for hand1 in range1.iter() {
+        for hand2 in range2.iter() {
+            if hand1.0 == hand2.0 || hand1.0 == hand2.1 || hand1.1 == hand2.0 || hand1.1 == hand2.1
+            {
+                continue;
+            }
+            for turn in 0..36 {
+                if hand1.0 == turn
+                    || hand1.1 == turn
+                    || hand2.0 == turn
+                    || hand2.1 == turn
+                    || flop[0] == turn
+                    || flop[1] == turn
+                    || flop[2] == turn
+                {
+                    continue;
+                }
+                for river in 0..36 {
+                    if turn == river
+                        || hand1.0 == river
+                        || hand1.1 == river
+                        || hand2.0 == river
+                        || hand2.1 == river
+                        || flop[0] == river
+                        || flop[1] == river
+                        || flop[2] == river
+                    {
+                        continue;
+                    }
+                    board[3] = turn;
+                    board[4] = river;
+                    let winner = evaluate_winner(*hand1, *hand2, &board);
+                    map.insert((*hand1, *hand2, turn, river), winner);
+                    map.insert((*hand2, *hand1, turn, river), -1 * winner);
+                }
+            }
+        }
+    }
     for i in 0..25 {
         let time = train(
             &g,
@@ -214,6 +261,7 @@ fn main() {
             &flop,
             &range1,
             &range2,
+            &map,
         );
         total += time;
         println!("{}: {}", i, time);
