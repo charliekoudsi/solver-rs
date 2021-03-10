@@ -18,7 +18,9 @@ fn single_thread_train(
     range2: &Vec<(u8, u8)>,
     min_i: usize,
     max_i: usize,
-) {
+) -> ([f64; 2], usize) {
+    let mut global_ev = [0.0; 2];
+    let mut combos = 0;
     let mut rng = thread_rng();
     let mut turn_cards = [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
@@ -87,15 +89,19 @@ fn single_thread_train(
                     // }
                     let board = [flop[0], flop[1], flop[2], turn, river];
                     let result = evaluate_winner((p1_one, p1_two), (p2_one, p2_two), &board);
-                    let mut ev = [1.0; 2];
+                    let mut ev = [0.0; 2];
                     let mut reach = [1.0; 2];
                     unsafe {
                         update_regret(0, &buckets, result, &mut reach, 1.0, &mut ev, strat, g);
                     }
+                    global_ev[0] += ev[0];
+                    global_ev[1] += ev[1];
+                    combos += 1;
                 }
             }
         }
     }
+    return (global_ev, combos);
 }
 
 fn train(
@@ -110,12 +116,12 @@ fn train(
 ) -> f64 {
     let start = Instant::now();
     // let combos = range1.len();
-    crossbeam::scope(|scope| {
-        scope.spawn(move |_| {
-            single_thread_train(g, strat_1, flop, range1, range2, 0, range1.len() / 4);
+    let v = crossbeam::scope(|scope| {
+        let a = scope.spawn(move |_| {
+            return single_thread_train(g, strat_1, flop, range1, range2, 0, range1.len() / 4);
         });
-        scope.spawn(move |_| {
-            single_thread_train(
+        let b = scope.spawn(move |_| {
+            return single_thread_train(
                 g,
                 strat_2,
                 flop,
@@ -125,8 +131,8 @@ fn train(
                 range1.len() / 2,
             );
         });
-        scope.spawn(move |_| {
-            single_thread_train(
+        let c = scope.spawn(move |_| {
+            return single_thread_train(
                 g,
                 strat_3,
                 flop,
@@ -136,7 +142,7 @@ fn train(
                 range1.len() * 3 / 4,
             );
         });
-        single_thread_train(
+        let d = single_thread_train(
             g,
             strat_4,
             flop,
@@ -145,14 +151,24 @@ fn train(
             range1.len() * 3 / 4,
             range1.len(),
         );
+        let a = a.join().unwrap();
+        let b = b.join().unwrap();
+        let c = c.join().unwrap();
+        let combos = a.1 + b.1 + c.1 + d.1;
+        let ev = [
+            (a.0[0] + b.0[0] + c.0[0] + d.0[0]) / combos as f64,
+            (a.0[1] + b.0[1] + c.0[1] + d.0[1]) / combos as f64,
+        ];
+        return ev;
     })
     .unwrap();
+    println!("{:?}", v);
     return start.elapsed().as_secs_f64();
 }
 
 fn main() {
     // panic!("{} {}", internal, terminal);
-    let g = Game::new();
+    let g = Game::new(true, 1);
     println!("{:?}", g.transition[0]);
     let flop = [2, 15, 19];
     let combos = [

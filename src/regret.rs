@@ -1,4 +1,4 @@
-use crate::game::{Game, NUM_INTERNAL, TOTAL_ACTIONS};
+use crate::game::{Game, NUM_INTERNAL, STARTING_POT, TOTAL_ACTIONS};
 use std::marker::PhantomData;
 
 pub struct SafeRegretStrategy {
@@ -237,17 +237,25 @@ pub unsafe fn update_regret(
 
         if g.is_fold(u) {
             if g.who_folded(u) == 0 {
-                ev[0] = -1.0 * (amount as f64) * reach[1] * chance;
+                ev[0] = -1.0 * (amount - STARTING_POT) as f64 * reach[1] * chance;
                 ev[1] = 1.0 * (amount as f64) * reach[0] * chance;
             } else {
                 ev[0] = 1.0 * (amount as f64) * reach[1] * chance;
-                ev[1] = -1.0 * (amount as f64) * reach[0] * chance;
+                ev[1] = -1.0 * (amount - STARTING_POT) as f64 * reach[0] * chance;
             }
         } else {
-            ev[0] = result as f64 * amount as f64 * reach[1] * chance;
-            ev[1] = -1.0 * result as f64 * amount as f64 * reach[0] * chance;
+            if result == 1 {
+                ev[0] = result as f64 * amount as f64 * reach[1] * chance;
+                ev[1] = -1.0 * result as f64 * (amount - STARTING_POT) as f64 * reach[0] * chance;
+            } else if result == -1 {
+                ev[0] = result as f64 * (amount - STARTING_POT) as f64 * reach[1] * chance;
+                ev[1] = -1.0 * result as f64 * amount as f64 * reach[0] * chance;
+            } else {
+                ev[0] = STARTING_POT as f64 / 2.0 * reach[1] * chance;
+                ev[1] = STARTING_POT as f64 / 2.0 * reach[0] * chance;
+            }
         }
-    } else if reach[0] < 1e-7 && reach[1] < 1e-7 {
+    } else if reach[0] < 1e-15 && reach[1] < 1e-15 {
         ev[0] = 0.0;
         ev[1] = 0.0;
     } else {

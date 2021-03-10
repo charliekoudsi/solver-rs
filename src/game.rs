@@ -1,9 +1,10 @@
 use hand_eval::{Hand, Rankable};
 
-pub const STATES: (usize, usize) = get_sequences(10, 75);
+const STARTING_STACK: usize = 195;
+pub const STARTING_POT: usize = 11;
+const STATES: (usize, usize) = get_sequences(STARTING_POT, STARTING_STACK);
 pub const NUM_INTERNAL: usize = STATES.0;
 pub const NUM_TERMINAL: usize = STATES.1;
-const STARTING_STACK: usize = 80;
 pub const TOTAL_ACTIONS: usize = 3;
 pub const P1_SIZES: [[(usize, usize); 1]; 3] = [[(1, 2)], [(1, 2)], [(1, 2)]];
 pub const P2_SIZES: [[(usize, usize); 1]; 3] = [[(1, 2)], [(1, 2)], [(1, 2)]];
@@ -235,8 +236,8 @@ impl Game {
             0,
             0,
             true,
-            10,
-            75,
+            STARTING_POT,
+            STARTING_STACK,
             &mut rounds,
             &mut whose_turn,
             &mut winner,
