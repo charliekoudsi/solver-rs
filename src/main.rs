@@ -1,14 +1,16 @@
 #![feature(const_mut_refs)]
 mod best_response;
+mod constants;
 mod game;
 mod regret;
 use best_response::BestResponse;
-use game::{evaluate_winner, get_buckets, Game, NO_DONK};
+use constants::NO_DONK;
+use game::{evaluate_winner, get_buckets, Game};
 use hand_eval::Card;
 use hand_eval::{gen_ranges, Isomorph};
 use rand::{seq::SliceRandom, thread_rng};
 use regret::{update_regret, RegretStrategy, SafeRegretStrategy};
-use std::{collections::HashMap, convert::TryInto, time::Instant};
+use std::{collections::HashMap, convert::TryInto, mem::transmute, time::Instant};
 
 fn single_thread_train(
     g: &Game,
@@ -117,7 +119,7 @@ fn train(
     range1: &Vec<(u8, u8)>,
     range2: &Vec<(u8, u8)>,
     map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
-) -> f64 {
+) -> (f64, [f64; 2]) {
     let start = Instant::now();
     // let combos = range1.len();
     let v = crossbeam::scope(|scope| {
@@ -169,11 +171,16 @@ fn train(
         return ev;
     })
     .unwrap();
-    println!("{:?}", v);
-    return start.elapsed().as_secs_f64();
+    return (start.elapsed().as_secs_f64(), v);
 }
 
 fn main() {
+    let test: f32 = 0.123456789;
+    unsafe {
+        let as_int: u32 = transmute(test);
+        let as_float: f32 = transmute(as_int ^ 0x80000000);
+        println!("{}", as_float);
+    }
     let g = Game::new();
     println!("{:?}", g.transition[0]);
     let flop = [2, 15, 19];
@@ -196,20 +203,20 @@ fn main() {
     let range2 = gen_ranges(&combos, &flop);
     let mut safe_1 = SafeRegretStrategy::new(&g, 0, range1.len());
     let mut safe_2 = SafeRegretStrategy::new(&g, 1, range2.len());
-    let regret_1 = RegretStrategy::new(
-        &mut safe_1.regret,
-        &mut safe_1.average_probability,
-        &mut safe_1.updates,
-    );
-    let regret_2 = RegretStrategy::new(
-        &mut safe_2.regret,
-        &mut safe_2.average_probability,
-        &mut safe_2.updates,
-    );
-    let mut strat_1 = [regret_1.0, regret_2.0];
-    let mut strat_2 = [regret_1.1, regret_2.1];
-    let mut strat_3 = [regret_1.2, regret_2.2];
-    let mut strat_4 = [regret_1.3, regret_2.3];
+    // let regret_1 = RegretStrategy::new(
+    //     &mut safe_1.regret,
+    //     &mut safe_1.average_probability,
+    //     &mut safe_1.updates,
+    // );
+    // let regret_2 = RegretStrategy::new(
+    //     &mut safe_2.regret,
+    //     &mut safe_2.average_probability,
+    //     &mut safe_2.updates,
+    // );
+    // let mut strat_1 = [regret_1.0, regret_2.0];
+    // let mut strat_2 = [regret_1.1, regret_2.1];
+    // let mut strat_3 = [regret_1.2, regret_2.2];
+    // let mut strat_4 = [regret_1.3, regret_2.3];
     let mut total = 0.0;
     let mut map: HashMap<((u8, u8), (u8, u8), u8, u8), i8> = HashMap::new();
     let mut board = [flop[0], flop[1], flop[2], 0, 0];
@@ -251,78 +258,107 @@ fn main() {
             }
         }
     }
-    for i in 0..25 {
-        let time = train(
-            &g,
-            &mut strat_1,
-            &mut strat_2,
-            &mut strat_3,
-            &mut strat_4,
-            &flop,
-            &range1,
-            &range2,
-            &map,
-        );
-        total += time;
-        println!("{}: {}", i, time);
+    let mut dEV = 100.0;
+    let mut runs = 0;
+    while dEV > 0.5 {
+        let mut ev = 0.0;
+        {
+            let regret_1 = RegretStrategy::new(
+                &mut safe_1.regret,
+                &mut safe_1.average_probability,
+                &mut safe_1.updates,
+            );
+            let regret_2 = RegretStrategy::new(
+                &mut safe_2.regret,
+                &mut safe_2.average_probability,
+                &mut safe_2.updates,
+            );
+            let mut strat_1 = [regret_1.0, regret_2.0];
+            let mut strat_2 = [regret_1.1, regret_2.1];
+            let mut strat_3 = [regret_1.2, regret_2.2];
+            let mut strat_4 = [regret_1.3, regret_2.3];
+            for i in 0..25 {
+                let (time, run_ev) = train(
+                    &g,
+                    &mut strat_1,
+                    &mut strat_2,
+                    &mut strat_3,
+                    &mut strat_4,
+                    &flop,
+                    &range1,
+                    &range2,
+                    &map,
+                );
+                total += time;
+                println!("{:?}", run_ev);
+                println!("{}: {}", runs + i, time);
+                ev = run_ev[0] + run_ev[1];
+            }
+        }
+        let mut best_resp_strat = SafeRegretStrategy::new(&g, 0, range1.len());
+        let best_resp =
+            BestResponse::new(0, &safe_2, &g, range1.clone(), range2.clone(), flop.clone());
+        println!("computing br");
+        let time = Instant::now();
+        let mut val =
+            best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
+        // println!("{} ({})", val, time.elapsed().as_secs_f64());
+
+        let mut best_resp_strat = SafeRegretStrategy::new(&g, 1, range2.len());
+        let best_resp =
+            BestResponse::new(1, &safe_1, &g, range2.clone(), range1.clone(), flop.clone());
+        val += best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
+        // println!("{} ({})", val, time.elapsed().as_secs_f64());
+        dEV = 100.0 * (val - ev) / val;
+        println!("dEV: {}, Elapsed: {}", dEV, time.elapsed().as_secs_f64());
+        runs += 25;
+        // println!("{:?}", safe_1.regret[100]);
+        // safe_1.tame_regret(0.0016);
+        // println!("{:?}", safe_1.regret[100]);
     }
     let mut i = 0;
-    unsafe {
-        for (c1, c2) in &range1 {
-            let card1 = Card::from_u8(*c1);
-            let card2 = Card::from_u8(*c2);
+    for (c1, c2) in &range1 {
+        let card1 = Card::from_u8(*c1);
+        let card2 = Card::from_u8(*c2);
+        println!(
+            "P1 Open {}{}{}{}: {:?}",
+            card1.value.to_char(),
+            card1.suit.to_char(),
+            card2.value.to_char(),
+            card2.suit.to_char(),
+            safe_1.get_average_normalized_probability(0, i, &g)
+        );
+        println!(
+            "P2 vs. Check {}{}{}{}: {:?}",
+            card1.value.to_char(),
+            card1.suit.to_char(),
+            card2.value.to_char(),
+            card2.suit.to_char(),
+            safe_2.get_average_normalized_probability(
+                g.transition[0][1].try_into().unwrap(),
+                i,
+                &g
+            )
+        );
+        if !NO_DONK {
             println!(
-                "P1 Open {}{}{}{}: {:?}",
+                "P2 vs. Bet {}{}{}{}: {:?}",
                 card1.value.to_char(),
                 card1.suit.to_char(),
                 card2.value.to_char(),
                 card2.suit.to_char(),
-                strat_1[0].get_average_normalized_probability(0, i, &g)
-            );
-            println!(
-                "P2 vs. Check {}{}{}{}: {:?}",
-                card1.value.to_char(),
-                card1.suit.to_char(),
-                card2.value.to_char(),
-                card2.suit.to_char(),
-                strat_1[1].get_average_normalized_probability(
-                    g.transition[0][1].try_into().unwrap(),
+                safe_2.get_average_normalized_probability(
+                    g.transition[0][0].try_into().unwrap(),
                     i,
                     &g
                 )
             );
-            if !NO_DONK {
-                println!(
-                    "P2 vs. Bet {}{}{}{}: {:?}",
-                    card1.value.to_char(),
-                    card1.suit.to_char(),
-                    card2.value.to_char(),
-                    card2.suit.to_char(),
-                    strat_1[1].get_average_normalized_probability(
-                        g.transition[0][0].try_into().unwrap(),
-                        i,
-                        &g
-                    )
-                );
-            }
-            i += 1;
-            // let encoded: Vec<u8> = bincode::serialize(&strat.lock().unwrap()[0]).unwrap();
-            // let mut file = File::create("test").unwrap();
-            // file.write_all(&encoded).unwrap();
         }
+        i += 1;
+        // let encoded: Vec<u8> = bincode::serialize(&strat.lock().unwrap()[0]).unwrap();
+        // let mut file = File::create("test").unwrap();
+        // file.write_all(&encoded).unwrap();
     }
-    println!("{}", total / 25.0);
+    println!("{}", total / runs as f64);
     // println!("{}", safe_1.updates[0][55]);
-    let mut best_resp_strat = SafeRegretStrategy::new(&g, 0, range1.len());
-    let best_resp = BestResponse::new(0, &safe_2, &g, range1.clone(), range2.clone(), flop.clone());
-    println!("computing br");
-    let time = Instant::now();
-    let val = best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
-    println!("{} ({})", val, time.elapsed().as_secs_f64());
-
-    let mut best_resp_strat = SafeRegretStrategy::new(&g, 1, range2.len());
-    let best_resp = BestResponse::new(1, &safe_1, &g, range2.clone(), range1.clone(), flop.clone());
-    let time = Instant::now();
-    let val = best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
-    println!("{} ({})", val, time.elapsed().as_secs_f64());
 }

@@ -1,6 +1,8 @@
-use crate::game::{Game, NUM_INTERNAL, STARTING_POT, TOTAL_ACTIONS};
+use crate::constants::{NUM_INTERNAL, STARTING_POT, TOTAL_ACTIONS};
+use crate::game::Game;
 use std::marker::PhantomData;
 
+#[derive(Debug, Clone)]
 pub struct SafeRegretStrategy {
     pub regret: Vec<Vec<[f64; TOTAL_ACTIONS]>>,
     pub average_probability: Vec<Vec<[f64; TOTAL_ACTIONS]>>,
@@ -68,6 +70,16 @@ impl SafeRegretStrategy {
             }
         }
         return probability;
+    }
+
+    pub fn tame_regret(&mut self, factor: f64) {
+        for i in &mut self.regret {
+            for j in i {
+                for a in 0..TOTAL_ACTIONS {
+                    j[a] *= factor;
+                }
+            }
+        }
     }
 }
 
