@@ -1,6 +1,5 @@
-use crate::game::{
-    get_bucket, get_turn_bucket, Game, NUM_INTERNAL, NUM_TERMINAL, STARTING_POT, TOTAL_ACTIONS,
-};
+use crate::constants::{NUM_INTERNAL, NUM_TERMINAL, STARTING_POT, TOTAL_ACTIONS};
+use crate::game::{get_bucket, get_turn_bucket, Game};
 use crate::regret::SafeRegretStrategy as RegretStrategy;
 use std::collections::HashMap;
 
