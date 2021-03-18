@@ -94,7 +94,7 @@ pub struct RegretStrategy<'a> {
 unsafe impl<'a> Send for RegretStrategy<'a> {}
 
 impl<'a> RegretStrategy<'a> {
-    pub fn new(
+    pub fn new_4(
         regret: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
         average_probability: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
         updates: &'a mut Vec<Vec<usize>>,
@@ -105,6 +105,72 @@ impl<'a> RegretStrategy<'a> {
         RegretStrategy<'a>,
     ) {
         return (
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+        );
+    }
+
+    pub fn new_8(
+        regret: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+        average_probability: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+        updates: &'a mut Vec<Vec<usize>>,
+    ) -> (
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+        RegretStrategy<'a>,
+    ) {
+        return (
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
+            RegretStrategy {
+                regret: regret.as_mut_ptr(),
+                average_probability: average_probability.as_mut_ptr(),
+                updates: updates.as_mut_ptr(),
+                lifetime: PhantomData,
+            },
             RegretStrategy {
                 regret: regret.as_mut_ptr(),
                 average_probability: average_probability.as_mut_ptr(),

@@ -33,6 +33,7 @@ fn single_thread_train(
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
         25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
     ];
+    // This relies on a magic number (size of p2 range)
     let mut p2_range_cards = [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
         25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
@@ -78,19 +79,6 @@ fn single_thread_train(
                         [i, i * 31 + p1_turn, (i * 31 + p1_turn) * 30 + p1_river],
                         [*j, *j * 31 + p2_turn, (*j * 31 + p2_turn) * 30 + p2_river],
                     ];
-                    // if (i * 31 + p1_turn) * 30 + p1_river >= 52080 {
-                    //     panic!(
-                    //         "{} {} {} {} {} {:?}",
-                    //         i, p1_turn, p1_river, turn, river, range1[i]
-                    //     );
-                    // }
-                    // if (*j * 31 + p2_turn) * 30 + p2_river >= 52080 {
-                    //     panic!(
-                    //         "{} {} {} {} {} {:?}",
-                    //         j, p2_turn, p2_river, turn, river, range2[*j]
-                    //     );
-                    // }
-                    let board = [flop[0], flop[1], flop[2], turn, river];
                     let result = map
                         .get(&((p1_one, p1_two), (p2_one, p2_two), turn, river))
                         .expect("outcome was not set");
@@ -109,7 +97,7 @@ fn single_thread_train(
     return (global_ev, combos);
 }
 
-fn train(
+fn train_4(
     g: &Game,
     strat_1: &mut [RegretStrategy; 2],
     strat_2: &mut [RegretStrategy; 2],
@@ -174,13 +162,130 @@ fn train(
     return (start.elapsed().as_secs_f64(), v);
 }
 
+fn train_8(
+    g: &Game,
+    strat_1: &mut [RegretStrategy; 2],
+    strat_2: &mut [RegretStrategy; 2],
+    strat_3: &mut [RegretStrategy; 2],
+    strat_4: &mut [RegretStrategy; 2],
+    strat_5: &mut [RegretStrategy; 2],
+    strat_6: &mut [RegretStrategy; 2],
+    strat_7: &mut [RegretStrategy; 2],
+    strat_8: &mut [RegretStrategy; 2],
+    flop: &[u8; 3],
+    range1: &Vec<(u8, u8)>,
+    range2: &Vec<(u8, u8)>,
+    map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
+) -> (f64, [f64; 2]) {
+    let start = Instant::now();
+    // let combos = range1.len();
+    let v = crossbeam::scope(|scope| {
+        let a = scope.spawn(move |_| {
+            return single_thread_train(g, strat_1, flop, range1, range2, 0, range1.len() / 4, map);
+        });
+        let b = scope.spawn(move |_| {
+            return single_thread_train(
+                g,
+                strat_2,
+                flop,
+                range1,
+                range2,
+                range1.len() / 8,
+                range1.len() / 4,
+                map,
+            );
+        });
+        let c = scope.spawn(move |_| {
+            return single_thread_train(
+                g,
+                strat_3,
+                flop,
+                range1,
+                range2,
+                range1.len() / 4,
+                range1.len() * 3 / 8,
+                map,
+            );
+        });
+        let d = scope.spawn(move |_| {
+            return single_thread_train(
+                g,
+                strat_4,
+                flop,
+                range1,
+                range2,
+                range1.len() * 3 / 8,
+                range1.len() / 2,
+                map,
+            );
+        });
+        let e = scope.spawn(move |_| {
+            return single_thread_train(
+                g,
+                strat_5,
+                flop,
+                range1,
+                range2,
+                range1.len() / 2,
+                range1.len() * 5 / 8,
+                map,
+            );
+        });
+        let f = scope.spawn(move |_| {
+            return single_thread_train(
+                g,
+                strat_6,
+                flop,
+                range1,
+                range2,
+                range1.len() * 5 / 8,
+                range1.len() * 3 / 4,
+                map,
+            );
+        });
+        let g_t = scope.spawn(move |_| {
+            return single_thread_train(
+                g,
+                strat_7,
+                flop,
+                range1,
+                range2,
+                range1.len() * 3 / 4,
+                range1.len() * 7 / 8,
+                map,
+            );
+        });
+        let h = single_thread_train(
+            g,
+            strat_8,
+            flop,
+            range1,
+            range2,
+            range1.len() * 7 / 8,
+            range1.len(),
+            map,
+        );
+        let a = a.join().unwrap();
+        let b = b.join().unwrap();
+        let c = c.join().unwrap();
+        let d = d.join().unwrap();
+        let e = e.join().unwrap();
+        let f = f.join().unwrap();
+        let g_t = g_t.join().unwrap();
+        let combos = a.1 + b.1 + c.1 + d.1 + e.1 + f.1 + g_t.1 + h.1;
+        let ev = [
+            (a.0[0] + b.0[0] + c.0[0] + d.0[0] + e.0[0] + f.0[0] + g_t.0[0] + h.0[0])
+                / combos as f64,
+            (a.0[1] + b.0[1] + c.0[1] + d.0[1] + e.0[1] + f.0[1] + g_t.0[1] + h.0[1])
+                / combos as f64,
+        ];
+        return ev;
+    })
+    .unwrap();
+    return (start.elapsed().as_secs_f64(), v);
+}
+
 fn main() {
-    let test: f32 = 0.123456789;
-    unsafe {
-        let as_int: u32 = transmute(test);
-        let as_float: f32 = transmute(as_int ^ 0x80000000);
-        println!("{}", as_float);
-    }
     let g = Game::new();
     println!("{:?}", g.transition[0]);
     let flop = [2, 15, 19];
@@ -260,62 +365,65 @@ fn main() {
     }
     let mut dEV = 100.0;
     let mut runs = 0;
-    while dEV > 0.5 {
-        let mut ev = 0.0;
-        {
-            let regret_1 = RegretStrategy::new(
-                &mut safe_1.regret,
-                &mut safe_1.average_probability,
-                &mut safe_1.updates,
-            );
-            let regret_2 = RegretStrategy::new(
-                &mut safe_2.regret,
-                &mut safe_2.average_probability,
-                &mut safe_2.updates,
-            );
-            let mut strat_1 = [regret_1.0, regret_2.0];
-            let mut strat_2 = [regret_1.1, regret_2.1];
-            let mut strat_3 = [regret_1.2, regret_2.2];
-            let mut strat_4 = [regret_1.3, regret_2.3];
-            for i in 0..25 {
-                let (time, run_ev) = train(
-                    &g,
-                    &mut strat_1,
-                    &mut strat_2,
-                    &mut strat_3,
-                    &mut strat_4,
-                    &flop,
-                    &range1,
-                    &range2,
-                    &map,
-                );
-                total += time;
-                println!("{:?}", run_ev);
-                println!("{}: {}", runs + i, time);
-                ev = run_ev[0] + run_ev[1];
-            }
-        }
-        let mut best_resp_strat = SafeRegretStrategy::new(&g, 0, range1.len());
-        let best_resp =
-            BestResponse::new(0, &safe_2, &g, range1.clone(), range2.clone(), flop.clone());
-        println!("computing br");
-        let time = Instant::now();
-        let mut val =
-            best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
-        // println!("{} ({})", val, time.elapsed().as_secs_f64());
-
-        let mut best_resp_strat = SafeRegretStrategy::new(&g, 1, range2.len());
-        let best_resp =
-            BestResponse::new(1, &safe_1, &g, range2.clone(), range1.clone(), flop.clone());
-        val += best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
-        // println!("{} ({})", val, time.elapsed().as_secs_f64());
-        dEV = 100.0 * (val - ev) / val;
-        println!("dEV: {}, Elapsed: {}", dEV, time.elapsed().as_secs_f64());
-        runs += 25;
-        // println!("{:?}", safe_1.regret[100]);
-        // safe_1.tame_regret(0.0016);
-        // println!("{:?}", safe_1.regret[100]);
+    // while dEV > 0.5 {
+    let mut ev = 0.0;
+    // {
+    let regret_1 = RegretStrategy::new_8(
+        &mut safe_1.regret,
+        &mut safe_1.average_probability,
+        &mut safe_1.updates,
+    );
+    let regret_2 = RegretStrategy::new_8(
+        &mut safe_2.regret,
+        &mut safe_2.average_probability,
+        &mut safe_2.updates,
+    );
+    let mut strat_1 = [regret_1.0, regret_2.0];
+    let mut strat_2 = [regret_1.1, regret_2.1];
+    let mut strat_3 = [regret_1.2, regret_2.2];
+    let mut strat_4 = [regret_1.3, regret_2.3];
+    let mut strat_5 = [regret_1.4, regret_2.4];
+    let mut strat_6 = [regret_1.5, regret_2.5];
+    let mut strat_7 = [regret_1.6, regret_2.6];
+    let mut strat_8 = [regret_1.7, regret_2.7];
+    for i in 0..25 {
+        let (time, run_ev) = train_8(
+            &g,
+            &mut strat_1,
+            &mut strat_2,
+            &mut strat_3,
+            &mut strat_4,
+            &mut strat_5,
+            &mut strat_6,
+            &mut strat_7,
+            &mut strat_8,
+            &flop,
+            &range1,
+            &range2,
+            &map,
+        );
+        total += time;
+        println!("{:?}", run_ev);
+        println!("{}: {}", runs + i, time);
+        ev = run_ev[0] + run_ev[1];
     }
+    // }
+    let mut best_resp_strat = SafeRegretStrategy::new(&g, 0, range1.len());
+    let best_resp = BestResponse::new(0, &safe_2, &g, range1.clone(), range2.clone(), flop.clone());
+    println!("computing br");
+    let time = Instant::now();
+    let mut val =
+        best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
+    // println!("{} ({})", val, time.elapsed().as_secs_f64());
+
+    let mut best_resp_strat = SafeRegretStrategy::new(&g, 1, range2.len());
+    let best_resp = BestResponse::new(1, &safe_1, &g, range2.clone(), range1.clone(), flop.clone());
+    val += best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
+    // println!("{} ({})", val, time.elapsed().as_secs_f64());
+    dEV = 100.0 * (val - ev) / val;
+    println!("dEV: {}, Elapsed: {}", dEV, time.elapsed().as_secs_f64());
+    runs += 25;
+    // }
     let mut i = 0;
     for (c1, c2) in &range1 {
         let card1 = Card::from_u8(*c1);
