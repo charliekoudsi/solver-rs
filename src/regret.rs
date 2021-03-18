@@ -4,8 +4,8 @@ use std::marker::PhantomData;
 
 #[derive(Debug, Clone)]
 pub struct SafeRegretStrategy {
-    pub regret: Vec<Vec<[f64; TOTAL_ACTIONS]>>,
-    pub average_probability: Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+    pub regret: Vec<Vec<[f32; TOTAL_ACTIONS]>>,
+    pub average_probability: Vec<Vec<[f32; TOTAL_ACTIONS]>>,
     pub updates: Vec<Vec<usize>>,
 }
 
@@ -38,7 +38,7 @@ impl SafeRegretStrategy {
     }
 
     #[inline(always)]
-    fn get_average_probability(&self, u: usize, bucket: usize) -> &[f64; TOTAL_ACTIONS] {
+    fn get_average_probability(&self, u: usize, bucket: usize) -> &[f32; TOTAL_ACTIONS] {
         return &self.average_probability[u][bucket];
     }
 
@@ -48,7 +48,7 @@ impl SafeRegretStrategy {
         u: usize,
         bucket: usize,
         g: &Game,
-    ) -> [f64; TOTAL_ACTIONS] {
+    ) -> [f32; TOTAL_ACTIONS] {
         let mut prob_sum = 0.0;
         let mut probability = [0.0; TOTAL_ACTIONS];
         let average_probability = self.get_average_probability(u, bucket);
@@ -63,7 +63,7 @@ impl SafeRegretStrategy {
             return probability;
         }
 
-        let p = 1.0 / (g.get_num_actions(u) as f64);
+        let p = 1.0 / (g.get_num_actions(u) as f32);
         for i in 0..TOTAL_ACTIONS {
             if g.can_do_action(i, u) {
                 probability[i] = p;
@@ -72,7 +72,7 @@ impl SafeRegretStrategy {
         return probability;
     }
 
-    pub fn tame_regret(&mut self, factor: f64) {
+    pub fn tame_regret(&mut self, factor: f32) {
         for i in &mut self.regret {
             for j in i {
                 for a in 0..TOTAL_ACTIONS {
@@ -85,18 +85,18 @@ impl SafeRegretStrategy {
 
 #[derive(Debug, Clone)]
 pub struct RegretStrategy<'a> {
-    regret: *mut Vec<[f64; TOTAL_ACTIONS]>,
-    average_probability: *mut Vec<[f64; TOTAL_ACTIONS]>,
+    regret: *mut Vec<[f32; TOTAL_ACTIONS]>,
+    average_probability: *mut Vec<[f32; TOTAL_ACTIONS]>,
     updates: *mut Vec<usize>,
-    lifetime: PhantomData<&'a f64>,
+    lifetime: PhantomData<&'a f32>,
 }
 
 unsafe impl<'a> Send for RegretStrategy<'a> {}
 
 impl<'a> RegretStrategy<'a> {
     pub fn new_4(
-        regret: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
-        average_probability: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+        regret: &'a mut Vec<Vec<[f32; TOTAL_ACTIONS]>>,
+        average_probability: &'a mut Vec<Vec<[f32; TOTAL_ACTIONS]>>,
         updates: &'a mut Vec<Vec<usize>>,
     ) -> (
         RegretStrategy<'a>,
@@ -133,8 +133,8 @@ impl<'a> RegretStrategy<'a> {
     }
 
     pub fn new_8(
-        regret: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
-        average_probability: &'a mut Vec<Vec<[f64; TOTAL_ACTIONS]>>,
+        regret: &'a mut Vec<Vec<[f32; TOTAL_ACTIONS]>>,
+        average_probability: &'a mut Vec<Vec<[f32; TOTAL_ACTIONS]>>,
         updates: &'a mut Vec<Vec<usize>>,
     ) -> (
         RegretStrategy<'a>,
@@ -199,7 +199,7 @@ impl<'a> RegretStrategy<'a> {
     }
 
     #[inline(always)]
-    unsafe fn get_regret(&mut self, u: usize, bucket: usize) -> &mut [f64; TOTAL_ACTIONS] {
+    unsafe fn get_regret(&mut self, u: usize, bucket: usize) -> &mut [f32; TOTAL_ACTIONS] {
         return &mut *((*self.regret.offset(u as isize))
             .as_mut_ptr()
             .offset(bucket as isize));
@@ -219,7 +219,7 @@ impl<'a> RegretStrategy<'a> {
         &mut self,
         u: usize,
         bucket: usize,
-    ) -> &mut [f64; TOTAL_ACTIONS] {
+    ) -> &mut [f32; TOTAL_ACTIONS] {
         return &mut *((*self.average_probability.offset(u as isize))
             .as_mut_ptr()
             .offset(bucket as isize));
@@ -232,7 +232,7 @@ impl<'a> RegretStrategy<'a> {
         u: usize,
         bucket: usize,
         g: &Game,
-    ) -> [f64; TOTAL_ACTIONS] {
+    ) -> [f32; TOTAL_ACTIONS] {
         let mut probability = [0.0; TOTAL_ACTIONS];
         let mut regret_sum = 0.0;
         let regret = self.get_regret(u, bucket);
@@ -247,7 +247,7 @@ impl<'a> RegretStrategy<'a> {
             return probability;
         }
 
-        let p = 1.0 / (g.get_num_actions(u) as f64);
+        let p = 1.0 / (g.get_num_actions(u) as f32);
 
         for i in 0..TOTAL_ACTIONS {
             if g.can_do_action(i, u) {
@@ -265,7 +265,7 @@ impl<'a> RegretStrategy<'a> {
         u: usize,
         bucket: usize,
         g: &Game,
-    ) -> [f64; TOTAL_ACTIONS] {
+    ) -> [f32; TOTAL_ACTIONS] {
         let mut prob_sum = 0.0;
         let mut probability = [0.0; TOTAL_ACTIONS];
         let average_probability = self.get_average_probability(u, bucket);
@@ -280,7 +280,7 @@ impl<'a> RegretStrategy<'a> {
             return probability;
         }
 
-        let p = 1.0 / (g.get_num_actions(u) as f64);
+        let p = 1.0 / (g.get_num_actions(u) as f32);
         for i in 0..TOTAL_ACTIONS {
             if g.can_do_action(i, u) {
                 probability[i] = p;
@@ -290,7 +290,7 @@ impl<'a> RegretStrategy<'a> {
     }
 
     #[inline(always)]
-    unsafe fn update_avg_prob(&mut self, reach: f64, u: usize, bucket: usize, g: &Game) {
+    unsafe fn update_avg_prob(&mut self, reach: f32, u: usize, bucket: usize, g: &Game) {
         let probability = self.get_probability(u, bucket, g);
         let avg_prob = self.get_average_probability(u, bucket);
         for i in 0..TOTAL_ACTIONS {
@@ -303,9 +303,9 @@ pub unsafe fn update_regret(
     u: usize,
     buckets: &[[usize; 3]; 2],
     result: i8,
-    reach: &mut [f64; 2],
-    chance: f64,
-    ev: &mut [f64; 2],
+    reach: &mut [f32; 2],
+    chance: f32,
+    ev: &mut [f32; 2],
     strat: &mut [RegretStrategy; 2],
     g: &Game,
 ) {
@@ -315,22 +315,22 @@ pub unsafe fn update_regret(
 
         if g.is_fold(u) {
             if g.who_folded(u) == 0 {
-                ev[0] = -1.0 * (amount - STARTING_POT) as f64 * reach[1] * chance;
-                ev[1] = 1.0 * (amount as f64) * reach[0] * chance;
+                ev[0] = -1.0 * (amount - STARTING_POT) as f32 * reach[1] * chance;
+                ev[1] = 1.0 * (amount as f32) * reach[0] * chance;
             } else {
-                ev[0] = 1.0 * (amount as f64) * reach[1] * chance;
-                ev[1] = -1.0 * (amount - STARTING_POT) as f64 * reach[0] * chance;
+                ev[0] = 1.0 * (amount as f32) * reach[1] * chance;
+                ev[1] = -1.0 * (amount - STARTING_POT) as f32 * reach[0] * chance;
             }
         } else {
             if result == 1 {
-                ev[0] = result as f64 * amount as f64 * reach[1] * chance;
-                ev[1] = -1.0 * result as f64 * (amount - STARTING_POT) as f64 * reach[0] * chance;
+                ev[0] = result as f32 * amount as f32 * reach[1] * chance;
+                ev[1] = -1.0 * result as f32 * (amount - STARTING_POT) as f32 * reach[0] * chance;
             } else if result == -1 {
-                ev[0] = result as f64 * (amount - STARTING_POT) as f64 * reach[1] * chance;
-                ev[1] = -1.0 * result as f64 * amount as f64 * reach[0] * chance;
+                ev[0] = result as f32 * (amount - STARTING_POT) as f32 * reach[1] * chance;
+                ev[1] = -1.0 * result as f32 * amount as f32 * reach[0] * chance;
             } else {
-                ev[0] = STARTING_POT as f64 / 2.0 * reach[1] * chance;
-                ev[1] = STARTING_POT as f64 / 2.0 * reach[0] * chance;
+                ev[0] = STARTING_POT as f32 / 2.0 * reach[1] * chance;
+                ev[1] = STARTING_POT as f32 / 2.0 * reach[0] * chance;
             }
         }
     } else if reach[0] < 1e-15 && reach[1] < 1e-15 {

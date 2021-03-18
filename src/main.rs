@@ -21,7 +21,7 @@ fn single_thread_train(
     min_i: usize,
     max_i: usize,
     map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
-) -> ([f64; 2], usize) {
+) -> ([f32; 2], usize) {
     let mut global_ev = [0.0; 2];
     let mut combos = 0;
     let mut rng = thread_rng();
@@ -107,7 +107,7 @@ fn train_4(
     range1: &Vec<(u8, u8)>,
     range2: &Vec<(u8, u8)>,
     map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
-) -> (f64, [f64; 2]) {
+) -> (f32, [f32; 2]) {
     let start = Instant::now();
     // let combos = range1.len();
     let v = crossbeam::scope(|scope| {
@@ -153,13 +153,13 @@ fn train_4(
         let c = c.join().unwrap();
         let combos = a.1 + b.1 + c.1 + d.1;
         let ev = [
-            (a.0[0] + b.0[0] + c.0[0] + d.0[0]) / combos as f64,
-            (a.0[1] + b.0[1] + c.0[1] + d.0[1]) / combos as f64,
+            (a.0[0] + b.0[0] + c.0[0] + d.0[0]) / combos as f32,
+            (a.0[1] + b.0[1] + c.0[1] + d.0[1]) / combos as f32,
         ];
         return ev;
     })
     .unwrap();
-    return (start.elapsed().as_secs_f64(), v);
+    return (start.elapsed().as_secs_f32(), v);
 }
 
 fn train_8(
@@ -176,7 +176,7 @@ fn train_8(
     range1: &Vec<(u8, u8)>,
     range2: &Vec<(u8, u8)>,
     map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
-) -> (f64, [f64; 2]) {
+) -> (f32, [f32; 2]) {
     let start = Instant::now();
     // let combos = range1.len();
     let v = crossbeam::scope(|scope| {
@@ -275,14 +275,14 @@ fn train_8(
         let combos = a.1 + b.1 + c.1 + d.1 + e.1 + f.1 + g_t.1 + h.1;
         let ev = [
             (a.0[0] + b.0[0] + c.0[0] + d.0[0] + e.0[0] + f.0[0] + g_t.0[0] + h.0[0])
-                / combos as f64,
+                / combos as f32,
             (a.0[1] + b.0[1] + c.0[1] + d.0[1] + e.0[1] + f.0[1] + g_t.0[1] + h.0[1])
-                / combos as f64,
+                / combos as f32,
         ];
         return ev;
     })
     .unwrap();
-    return (start.elapsed().as_secs_f64(), v);
+    return (start.elapsed().as_secs_f32(), v);
 }
 
 fn main() {
@@ -414,14 +414,14 @@ fn main() {
     let time = Instant::now();
     let mut val =
         best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
-    // println!("{} ({})", val, time.elapsed().as_secs_f64());
+    // println!("{} ({})", val, time.elapsed().as_secs_f32());
 
     let mut best_resp_strat = SafeRegretStrategy::new(&g, 1, range2.len());
     let best_resp = BestResponse::new(1, &safe_1, &g, range2.clone(), range1.clone(), flop.clone());
     val += best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
-    // println!("{} ({})", val, time.elapsed().as_secs_f64());
+    // println!("{} ({})", val, time.elapsed().as_secs_f32());
     dEV = 100.0 * (val - ev) / val;
-    println!("dEV: {}, Elapsed: {}", dEV, time.elapsed().as_secs_f64());
+    println!("dEV: {}, Elapsed: {}", dEV, time.elapsed().as_secs_f32());
     runs += 25;
     // }
     let mut i = 0;
@@ -467,6 +467,6 @@ fn main() {
         // let mut file = File::create("test").unwrap();
         // file.write_all(&encoded).unwrap();
     }
-    println!("{}", total / runs as f64);
+    println!("{}", total / runs as f32);
     // println!("{}", safe_1.updates[0][55]);
 }

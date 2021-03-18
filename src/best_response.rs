@@ -3,7 +3,7 @@ use crate::game::{get_bucket, get_turn_bucket, Game};
 use crate::regret::SafeRegretStrategy as RegretStrategy;
 use std::collections::HashMap;
 
-type TerminalProb = Vec<Vec<f64>>;
+type TerminalProb = Vec<Vec<f32>>;
 type Range = Vec<(u8, u8)>;
 
 pub struct BestResponse {
@@ -34,7 +34,7 @@ fn compute_flop_probabilities(
     flop: &[u8; 3],
     range_bucket: usize,
     range: &Range,
-    reach: f64,
+    reach: f32,
     strat: &RegretStrategy,
     prob: &mut TerminalProb,
     g: &Game,
@@ -105,7 +105,7 @@ fn compute_turn_probabilities(
     turn: u8,
     range_bucket: usize,
     range: &Range,
-    reach: f64,
+    reach: f32,
     strat: &RegretStrategy,
     prob: &mut TerminalProb,
     g: &Game,
@@ -182,7 +182,7 @@ fn compute_river_probabilities(
     river: u8,
     range_bucket: usize,
     range: &Range,
-    reach: f64,
+    reach: f32,
     strat: &RegretStrategy,
     prob: &mut TerminalProb,
     g: &Game,
@@ -279,9 +279,9 @@ impl BestResponse {
         };
     }
 
-    fn compute_chance_prob(&self, round: usize, hand_bucket: usize) -> f64 {
-        let combos = self.range.len() as f64;
-        let opp_combos = self.opp_combos[hand_bucket] as f64;
+    fn compute_chance_prob(&self, round: usize, hand_bucket: usize) -> f32 {
+        let combos = self.range.len() as f32;
+        let opp_combos = self.opp_combos[hand_bucket] as f32;
         if round == 0 {
             return 1.0 / (combos * opp_combos);
         } else if round == 1 {
@@ -299,7 +299,7 @@ impl BestResponse {
         turn: Option<(usize, usize)>,
         river: Option<(usize, usize)>,
         map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
-    ) -> f64 {
+    ) -> f32 {
         if g.is_terminal(u) {
             if g.is_showdown(u) {
                 let mut ev = 0.0;
@@ -327,11 +327,11 @@ impl BestResponse {
                             let winner = *map.get(&(h, (card1, card2), t, r)).expect("not set");
                             let amount = g.get_win_amount(u);
                             if winner == 1 {
-                                ev += amount as f64 * p * chance
+                                ev += amount as f32 * p * chance
                             } else if winner == -1 {
-                                ev += (-1 * (amount - STARTING_POT) as isize) as f64 * p * chance;
+                                ev += (-1 * (amount - STARTING_POT) as isize) as f32 * p * chance;
                             } else {
-                                ev += STARTING_POT as f64 / 2.0 * p * chance;
+                                ev += STARTING_POT as f32 / 2.0 * p * chance;
                             }
                         }
                     }
@@ -366,12 +366,12 @@ impl BestResponse {
                                 let winner = *map.get(&(h, (card1, card2), t, j)).expect("not set");
                                 let amount = g.get_win_amount(u);
                                 if winner == 1 {
-                                    ev += amount as f64 * p * chance
+                                    ev += amount as f32 * p * chance
                                 } else if winner == -1 {
                                     ev +=
-                                        (-1 * (amount - STARTING_POT) as isize) as f64 * p * chance;
+                                        (-1 * (amount - STARTING_POT) as isize) as f32 * p * chance;
                                 } else {
-                                    ev += STARTING_POT as f64 / 2.0 * p * chance;
+                                    ev += STARTING_POT as f32 / 2.0 * p * chance;
                                 }
                             }
                         }
@@ -417,13 +417,13 @@ impl BestResponse {
                                         *map.get(&(h, (card1, card2), k, j)).expect("not set");
                                     let amount = g.get_win_amount(u);
                                     if winner == 1 {
-                                        ev += amount as f64 * p * chance
+                                        ev += amount as f32 * p * chance
                                     } else if winner == -1 {
-                                        ev += (-1 * (amount - STARTING_POT) as isize) as f64
+                                        ev += (-1 * (amount - STARTING_POT) as isize) as f32
                                             * p
                                             * chance;
                                     } else {
-                                        ev += STARTING_POT as f64 / 2.0 * p * chance;
+                                        ev += STARTING_POT as f32 / 2.0 * p * chance;
                                     }
                                 }
                             }
@@ -497,9 +497,9 @@ impl BestResponse {
                     }
                 }
                 if result == 1 {
-                    return p * g.get_win_amount(u) as f64;
+                    return p * g.get_win_amount(u) as f32;
                 } else {
-                    return p * (-1 * (g.get_win_amount(u) - STARTING_POT) as isize) as f64;
+                    return p * (-1 * (g.get_win_amount(u) - STARTING_POT) as isize) as f32;
                 }
             }
         } else if hand == None {
