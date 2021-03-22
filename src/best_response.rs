@@ -285,9 +285,9 @@ impl BestResponse {
         if round == 0 {
             return 1.0 / (combos * opp_combos);
         } else if round == 1 {
-            return 1.0 / (combos * opp_combos * 29.0);
+            return 1.0 / (combos * opp_combos * 45.0);
         }
-        return 1.0 / (combos * opp_combos * 29.0 * 28.0);
+        return 1.0 / (combos * opp_combos * 45.0 * 44.0);
     }
 
     pub fn compute_best_response(
