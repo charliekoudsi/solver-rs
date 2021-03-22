@@ -26,11 +26,13 @@ fn single_thread_train(
     let mut rng = thread_rng();
     let mut turn_cards = [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+        48, 49, 50, 51,
     ];
     let mut river_cards = [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+        48, 49, 50, 51,
     ];
     // This relies on a magic number (size of p2 range)
     let mut p2_range_cards = [
@@ -78,13 +80,26 @@ fn single_thread_train(
                         [i, i * 47 + p1_turn, (i * 47 + p1_turn) * 46 + p1_river],
                         [*j, *j * 47 + p2_turn, (*j * 47 + p2_turn) * 46 + p2_river],
                     ];
-                    let result = map
-                        .get(&((p1_one, p1_two), (p2_one, p2_two), turn, river))
-                        .expect("outcome was not set");
+                    let result = map.get(&((p1_one, p1_two), (p2_one, p2_two), turn, river));
+                    if result == None {
+                        panic!(
+                            "({},{}) ({},{}) & {}, {}",
+                            p1_one, p1_two, p2_one, p2_two, turn, river
+                        );
+                    }
                     let mut ev = [0.0; 2];
                     let mut reach = [1.0; 2];
                     unsafe {
-                        update_regret(0, &buckets, *result, &mut reach, 1.0, &mut ev, strat, g);
+                        update_regret(
+                            0,
+                            &buckets,
+                            *result.unwrap(),
+                            &mut reach,
+                            1.0,
+                            &mut ev,
+                            strat,
+                            g,
+                        );
                     }
                     global_ev[0] += ev[0];
                     global_ev[1] += ev[1];
@@ -287,21 +302,21 @@ fn train_8(
 fn main() {
     let g = Game::new();
     println!("{:?}", g.transition[0]);
-    let flop = [2, 15, 19];
+    let flop = [18, 31, 35];
     let combos = [
+        Isomorph::new(12, 12, false),
+        Isomorph::new(12, 11, true),
+        Isomorph::new(11, 11, false),
+        Isomorph::new(11, 10, true),
+        Isomorph::new(12, 10, true),
+        Isomorph::new(10, 10, false),
+        Isomorph::new(10, 9, true),
+        Isomorph::new(9, 9, false),
+        Isomorph::new(9, 8, true),
         Isomorph::new(8, 8, false),
-        Isomorph::new(8, 7, true),
         Isomorph::new(7, 7, false),
-        Isomorph::new(7, 6, true),
-        Isomorph::new(8, 6, true),
-        Isomorph::new(6, 6, false),
+        Isomorph::new(8, 7, true),
         Isomorph::new(6, 5, true),
-        Isomorph::new(5, 5, false),
-        Isomorph::new(5, 4, true),
-        Isomorph::new(4, 4, false),
-        Isomorph::new(3, 3, false),
-        Isomorph::new(4, 3, true),
-        Isomorph::new(2, 1, true),
     ];
     let range1 = gen_ranges(&combos, &flop);
     let range2 = gen_ranges(&combos, &flop);
@@ -385,7 +400,7 @@ fn main() {
     let mut strat_6 = [regret_1.5, regret_2.5];
     let mut strat_7 = [regret_1.6, regret_2.6];
     let mut strat_8 = [regret_1.7, regret_2.7];
-    for i in 0..25 {
+    while total < 600.0 {
         let (time, run_ev) = train_8(
             &g,
             &mut strat_1,
@@ -403,9 +418,12 @@ fn main() {
         );
         total += time;
         println!("{:?}", run_ev);
-        println!("{}: {}", runs + i, time);
+        println!("{}: {}", runs, time);
         ev = run_ev[0] + run_ev[1];
+        runs += 1;
     }
+    // for i in 0..10000 {
+    // }
     // }
     let mut best_resp_strat = SafeRegretStrategy::new(&g, 0, range1.len());
     let best_resp = BestResponse::new(0, &safe_2, &g, range1.clone(), range2.clone(), flop.clone());
@@ -417,11 +435,13 @@ fn main() {
 
     let mut best_resp_strat = SafeRegretStrategy::new(&g, 1, range2.len());
     let best_resp = BestResponse::new(1, &safe_1, &g, range2.clone(), range1.clone(), flop.clone());
-    val += best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
+    let new_val =
+        best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
+    println!("[{}, {}]", val, new_val);
+    val += new_val;
     // println!("{} ({})", val, time.elapsed().as_secs_f32());
     dEV = 100.0 * (val - ev) / val;
     println!("dEV: {}, Elapsed: {}", dEV, time.elapsed().as_secs_f32());
-    runs += 25;
     // }
     let mut i = 0;
     for (c1, c2) in &range1 {
