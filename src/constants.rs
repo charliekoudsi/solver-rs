@@ -8,6 +8,7 @@ pub const NUM_TERMINAL: usize = STATES.1;
 pub const TOTAL_ACTIONS: usize = 3;
 pub const P1_SIZES: [[(usize, usize); 1]; 3] = [[(1, 2)], [(1, 2)], [(1, 2)]];
 pub const P2_SIZES: [[(usize, usize); 1]; 3] = [[(1, 2)], [(1, 2)], [(1, 2)]];
+pub const NUM_CARDS: u8 = 36;
 
 const fn get_sequences(pot: usize, stack: usize) -> (usize, usize) {
     let mut internal = 0;

@@ -1,5 +1,5 @@
 use crate::constants::*;
-use hand_eval::{Hand, Rankable};
+use rs_poker::{Hand, Rankable};
 
 pub struct Game {
     pub rounds: [usize; NUM_INTERNAL],

@@ -20,9 +20,9 @@ impl SafeRegretStrategy {
                 if g.get_round(i) == 0 {
                     n = combos;
                 } else if g.get_round(i) == 1 {
-                    n = combos * 31;
+                    n = combos * 47;
                 } else {
-                    n = combos * 31 * 30;
+                    n = combos * 47 * 30;
                 }
 
                 regret[i] = vec![[0.0; TOTAL_ACTIONS]; n];

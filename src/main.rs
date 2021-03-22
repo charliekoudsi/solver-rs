@@ -4,12 +4,11 @@ mod constants;
 mod game;
 mod regret;
 use best_response::BestResponse;
-use constants::NO_DONK;
+use constants::{NO_DONK, NUM_CARDS};
 use game::{evaluate_winner, get_buckets, Game};
-use hand_eval::Card;
-use hand_eval::{gen_ranges, Isomorph};
 use rand::{seq::SliceRandom, thread_rng};
 use regret::{update_regret, RegretStrategy, SafeRegretStrategy};
+use rs_poker::{gen_ranges, Card, Isomorph};
 use std::{collections::HashMap, convert::TryInto, mem::transmute, time::Instant};
 
 fn single_thread_train(
@@ -48,8 +47,8 @@ fn single_thread_train(
                 continue;
             }
             turn_cards.shuffle(&mut rng);
-            for t in 0..36 {
-                let turn = turn_cards[t];
+            for t in turn_cards.iter() {
+                let turn = *t;
                 if turn == flop[0] || turn == flop[1] || turn == flop[2] {
                     continue;
                 }
@@ -60,8 +59,8 @@ fn single_thread_train(
                     continue;
                 }
                 river_cards.shuffle(&mut rng);
-                for r in 0..36 {
-                    let river = river_cards[r];
+                for r in river_cards.iter() {
+                    let river = *r;
                     if river == flop[0]
                         || river == flop[1]
                         || river == flop[2]
@@ -76,8 +75,8 @@ fn single_thread_train(
                     let ((p1_turn, p2_turn), (p1_river, p2_river)) =
                         get_buckets(p1_one, p1_two, p2_one, p2_two, flop, turn, river);
                     let buckets = [
-                        [i, i * 31 + p1_turn, (i * 31 + p1_turn) * 30 + p1_river],
-                        [*j, *j * 31 + p2_turn, (*j * 31 + p2_turn) * 30 + p2_river],
+                        [i, i * 47 + p1_turn, (i * 47 + p1_turn) * 46 + p1_river],
+                        [*j, *j * 47 + p2_turn, (*j * 47 + p2_turn) * 46 + p2_river],
                     ];
                     let result = map
                         .get(&((p1_one, p1_two), (p2_one, p2_two), turn, river))
@@ -331,7 +330,7 @@ fn main() {
             {
                 continue;
             }
-            for turn in 0..36 {
+            for turn in 0..NUM_CARDS {
                 if hand1.0 == turn
                     || hand1.1 == turn
                     || hand2.0 == turn
@@ -342,7 +341,7 @@ fn main() {
                 {
                     continue;
                 }
-                for river in 0..36 {
+                for river in 0..NUM_CARDS {
                     if turn == river
                         || hand1.0 == river
                         || hand1.1 == river

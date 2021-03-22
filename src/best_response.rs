@@ -1,4 +1,4 @@
-use crate::constants::{NUM_INTERNAL, NUM_TERMINAL, STARTING_POT, TOTAL_ACTIONS};
+use crate::constants::{NUM_CARDS, NUM_INTERNAL, NUM_TERMINAL, STARTING_POT, TOTAL_ACTIONS};
 use crate::game::{get_bucket, get_turn_bucket, Game};
 use crate::regret::SafeRegretStrategy as RegretStrategy;
 use std::collections::HashMap;
@@ -44,7 +44,7 @@ fn compute_flop_probabilities(
     } else if g.get_round(u) == 1 {
         let (card1, card2) = range[range_bucket];
         let mut turn = 0;
-        for i in 0..36 {
+        for i in 0..NUM_CARDS {
             if card1 == i || card2 == i || flop[0] == i || flop[1] == i || flop[2] == i {
                 continue;
             }
@@ -111,11 +111,11 @@ fn compute_turn_probabilities(
     g: &Game,
 ) {
     if g.is_terminal(u) {
-        prob[u - NUM_INTERNAL][range_bucket * 31 + turn as usize] = reach;
+        prob[u - NUM_INTERNAL][range_bucket * 47 + turn as usize] = reach;
     } else if g.get_round(u) == 2 {
         let (card1, card2) = range[range_bucket];
         let mut river = 0;
-        for i in 0..36 {
+        for i in 0..NUM_CARDS {
             if card1 == i || card2 == i || flop[0] == i || flop[1] == i || flop[2] == i || turn == i
             {
                 continue;
@@ -137,7 +137,7 @@ fn compute_turn_probabilities(
         }
     } else if g.get_whose_turn(u) == player {
         let actions =
-            strat.get_average_normalized_probability(u, range_bucket * 31 + turn as usize, g);
+            strat.get_average_normalized_probability(u, range_bucket * 47 + turn as usize, g);
         for i in 0..TOTAL_ACTIONS {
             if g.can_do_action(i, u) {
                 compute_turn_probabilities(
@@ -188,11 +188,11 @@ fn compute_river_probabilities(
     g: &Game,
 ) {
     if g.is_terminal(u) {
-        prob[u - NUM_INTERNAL][(range_bucket * 31 + turn as usize) * 30 + river as usize] = reach;
+        prob[u - NUM_INTERNAL][(range_bucket * 47 + turn as usize) * 46 + river as usize] = reach;
     } else if g.get_whose_turn(u) == player {
         let actions = strat.get_average_normalized_probability(
             u,
-            (range_bucket * 31 + turn as usize) * 30 + river as usize,
+            (range_bucket * 47 + turn as usize) * 46 + river as usize,
             g,
         );
         for i in 0..TOTAL_ACTIONS {
@@ -262,9 +262,9 @@ impl BestResponse {
             if g.get_round(i + NUM_INTERNAL) == 0 {
                 probability[i] = vec![0.0; range.len()];
             } else if g.get_round(i + NUM_INTERNAL) == 1 {
-                probability[i] = vec![0.0; range.len() * 31];
+                probability[i] = vec![0.0; range.len() * 47];
             } else {
-                probability[i] = vec![0.0; range.len() * 31 * 30];
+                probability[i] = vec![0.0; range.len() * 47 * 46];
             }
         }
         compute_terminal_probabilities(1 - p, &flop, strat, &mut probability, g, &range);
@@ -323,7 +323,7 @@ impl BestResponse {
                         {
                             let (t_b, r_b) = get_bucket(card1, card2, &self.flop, t, r);
                             let p = self.terminal_probs[u - NUM_INTERNAL]
-                                [(i * 31 + t_b) * 30 + r_b as usize];
+                                [(i * 47 + t_b) * 46 + r_b as usize];
                             let winner = *map.get(&(h, (card1, card2), t, r)).expect("not set");
                             let amount = g.get_win_amount(u);
                             if winner == 1 {
@@ -340,7 +340,7 @@ impl BestResponse {
                     let h = self.range[h_bucket];
                     let t = t as u8;
                     let chance = self.compute_chance_prob(2, h_bucket);
-                    for j in 0..36 {
+                    for j in 0..NUM_CARDS {
                         if j == self.flop[0]
                             || j == self.flop[1]
                             || j == self.flop[2]
@@ -362,7 +362,7 @@ impl BestResponse {
                                 && card2 != h.1
                             {
                                 let t_b = get_turn_bucket(card1, card2, &self.flop, t);
-                                let p = self.terminal_probs[u - NUM_INTERNAL][i * 31 + t_b];
+                                let p = self.terminal_probs[u - NUM_INTERNAL][i * 47 + t_b];
                                 let winner = *map.get(&(h, (card1, card2), t, j)).expect("not set");
                                 let amount = g.get_win_amount(u);
                                 if winner == 1 {
@@ -381,7 +381,7 @@ impl BestResponse {
                     let h = self.range[h_bucket];
                     let chance = self.compute_chance_prob(2, h_bucket);
                     let mut t = 0;
-                    for k in 0..36 {
+                    for k in 0..NUM_CARDS {
                         if k == self.flop[0]
                             || k == self.flop[1]
                             || k == self.flop[2]
@@ -391,7 +391,7 @@ impl BestResponse {
                             continue;
                         }
                         let mut r = 0;
-                        for j in 0..36 {
+                        for j in 0..NUM_CARDS {
                             if j == self.flop[0]
                                 || j == self.flop[1]
                                 || j == self.flop[2]
@@ -468,7 +468,7 @@ impl BestResponse {
                             && card2 != t
                         {
                             let t_b = get_turn_bucket(card1, card2, &self.flop, t);
-                            p += self.terminal_probs[u - NUM_INTERNAL][i * 31 + t_b] * chance;
+                            p += self.terminal_probs[u - NUM_INTERNAL][i * 47 + t_b] * chance;
                         }
                     }
                 } else {
@@ -491,7 +491,7 @@ impl BestResponse {
                             && card2 != r
                         {
                             let (t_b, r_b) = get_bucket(card1, card2, &self.flop, t, r);
-                            p += self.terminal_probs[u - NUM_INTERNAL][(i * 31 + t_b) * 30 + r_b]
+                            p += self.terminal_probs[u - NUM_INTERNAL][(i * 47 + t_b) * 46 + r_b]
                                 * chance;
                         }
                     }
@@ -513,7 +513,7 @@ impl BestResponse {
             let mut t = 0;
             let h = hand.expect("Reached turn, but no hand provided");
             let h = self.range[h];
-            for i in 0..36 {
+            for i in 0..NUM_CARDS {
                 if i == self.flop[0]
                     || i == self.flop[1]
                     || i == self.flop[2]
@@ -534,7 +534,7 @@ impl BestResponse {
             let (_, t) = turn.expect("Reached river, but no turn provided");
             let t = t as u8;
             let h = self.range[h];
-            for i in 0..36 {
+            for i in 0..NUM_CARDS {
                 if i == self.flop[0]
                     || i == self.flop[1]
                     || i == self.flop[2]
@@ -574,10 +574,10 @@ impl BestResponse {
             if let Some(r) = river {
                 let h = hand.expect("Reached river, but no hand provided");
                 let t = turn.expect("Reached river, but no turn provided");
-                strat.average_probability[u][(h * 31 + t.0) * 30 + r.0] = tuple;
+                strat.average_probability[u][(h * 47 + t.0) * 46 + r.0] = tuple;
             } else if let Some(t) = turn {
                 let h = hand.expect("Reached turn, but no hand provided");
-                strat.average_probability[u][h * 31 + t.0] = tuple;
+                strat.average_probability[u][h * 47 + t.0] = tuple;
             } else {
                 let h = hand.expect("Reached flop, but no hand provided");
                 strat.average_probability[u][h] = tuple;
