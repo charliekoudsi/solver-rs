@@ -11,6 +11,14 @@ use regret::{update_regret, RegretStrategy, SafeRegretStrategy};
 use rs_poker::{gen_ranges, Card, Isomorph};
 use std::{collections::HashMap, convert::TryInto, mem::transmute, time::Instant};
 
+fn gen_range_cards(len: usize) -> Vec<usize> {
+    let mut r = vec![0; len];
+    for i in 0..len {
+        r[i] = i;
+    }
+    return r;
+}
+
 fn single_thread_train(
     g: &Game,
     strat: &mut [RegretStrategy; 2],
@@ -34,12 +42,7 @@ fn single_thread_train(
         25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
         48, 49, 50, 51,
     ];
-    // This relies on a magic number (size of p2 range)
-    let mut p2_range_cards = [
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-        48, 49, 50, 51, 52, 53, 54, 55,
-    ];
+    let mut p2_range_cards = gen_range_cards(range2.len());
     for i in min_i..max_i {
         let (p1_one, p1_two) = range1[i];
         p2_range_cards.shuffle(&mut rng);
