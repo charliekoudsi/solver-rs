@@ -71,16 +71,6 @@ impl SafeRegretStrategy {
         }
         return probability;
     }
-
-    pub fn tame_regret(&mut self, factor: f32) {
-        for i in &mut self.regret {
-            for j in i {
-                for a in 0..TOTAL_ACTIONS {
-                    j[a] *= factor;
-                }
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -206,15 +196,6 @@ impl<'a> RegretStrategy<'a> {
     }
 
     #[inline(always)]
-    unsafe fn get_num_updates(&mut self, u: usize, bucket: usize) -> usize {
-        let update = (*self.updates.offset(u as isize))
-            .as_mut_ptr()
-            .offset(bucket as isize);
-        *update += 1;
-        return *update - 1;
-    }
-
-    #[inline(always)]
     unsafe fn get_average_probability(
         &mut self,
         u: usize,
@@ -309,7 +290,6 @@ pub unsafe fn update_regret(
     strat: &mut [RegretStrategy; 2],
     g: &Game,
 ) {
-    // println!("update");
     if g.is_terminal(u) {
         let amount = g.get_win_amount(u);
 
@@ -333,9 +313,6 @@ pub unsafe fn update_regret(
                 ev[1] = STARTING_POT as f32 / 2.0 * reach[0] * chance;
             }
         }
-    } else if reach[0] < 1e-15 && reach[1] < 1e-15 {
-        ev[0] = 0.0;
-        ev[1] = 0.0;
     } else {
         let player = g.get_whose_turn(u);
         let opponent = 1 - player;
