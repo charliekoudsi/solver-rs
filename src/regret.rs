@@ -313,6 +313,9 @@ pub unsafe fn update_regret(
                 ev[1] = STARTING_POT as f32 / 2.0 * reach[0] * chance;
             }
         }
+    } else if reach[0] < 1e-15 && reach[1] < 1e-15 {
+        ev[0] = 0.0;
+        ev[1] = 0.0;
     } else {
         let player = g.get_whose_turn(u);
         let opponent = 1 - player;
