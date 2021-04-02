@@ -1,6 +1,7 @@
 use crate::constants::{NUM_CARDS, NUM_INTERNAL, NUM_TERMINAL, STARTING_POT, TOTAL_ACTIONS};
 use crate::game::{get_bucket, get_turn_bucket, Game};
 use crate::regret::SafeRegretStrategy as RegretStrategy;
+use crate::winners::Winners;
 use std::collections::HashMap;
 
 type TerminalProb = Vec<Vec<f32>>;
@@ -260,14 +261,14 @@ impl BestResponse {
         let mut probability: TerminalProb = vec![vec![0.0; 1]; NUM_TERMINAL];
         for i in 0..NUM_TERMINAL {
             if g.get_round(i + NUM_INTERNAL) == 0 {
-                probability[i] = vec![0.0; range.len()];
+                probability[i] = vec![0.0; opp_range.len()];
             } else if g.get_round(i + NUM_INTERNAL) == 1 {
-                probability[i] = vec![0.0; range.len() * 47];
+                probability[i] = vec![0.0; opp_range.len() * 47];
             } else {
-                probability[i] = vec![0.0; range.len() * 47 * 46];
+                probability[i] = vec![0.0; opp_range.len() * 47 * 46];
             }
         }
-        compute_terminal_probabilities(1 - p, &flop, strat, &mut probability, g, &range);
+        compute_terminal_probabilities(1 - p, &flop, strat, &mut probability, g, &opp_range);
         let opp_combos = compute_opp_combos(&range, &opp_range);
         return Self {
             player: p,
@@ -298,7 +299,7 @@ impl BestResponse {
         hand: Option<usize>,
         turn: Option<(usize, usize)>,
         river: Option<(usize, usize)>,
-        map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
+        winners: &Winners,
     ) -> f32 {
         if g.is_terminal(u) {
             if g.is_showdown(u) {
@@ -324,7 +325,14 @@ impl BestResponse {
                             let (t_b, r_b) = get_bucket(card1, card2, &self.flop, t, r);
                             let p = self.terminal_probs[u - NUM_INTERNAL]
                                 [(i * 47 + t_b) * 46 + r_b as usize];
-                            let winner = *map.get(&(h, (card1, card2), t, r)).expect("not set");
+                            // let winner = *map.get(&(h, (card1, card2), t, r)).expect("not set");
+                            let winner = winners.get_winner(
+                                h_bucket,
+                                i,
+                                t as usize,
+                                r as usize,
+                                self.player,
+                            );
                             let amount = g.get_win_amount(u);
                             if winner == 1 {
                                 ev += amount as f32 * p * chance
@@ -363,7 +371,14 @@ impl BestResponse {
                             {
                                 let t_b = get_turn_bucket(card1, card2, &self.flop, t);
                                 let p = self.terminal_probs[u - NUM_INTERNAL][i * 47 + t_b];
-                                let winner = *map.get(&(h, (card1, card2), t, j)).expect("not set");
+                                // let winner = *map.get(&(h, (card1, card2), t, j)).expect("not set");
+                                let winner = winners.get_winner(
+                                    h_bucket,
+                                    i,
+                                    t as usize,
+                                    j as usize,
+                                    self.player,
+                                );
                                 let amount = g.get_win_amount(u);
                                 if winner == 1 {
                                     ev += amount as f32 * p * chance
@@ -413,8 +428,13 @@ impl BestResponse {
                                     && card2 != h.1
                                 {
                                     let p = self.terminal_probs[u - NUM_INTERNAL][i];
-                                    let winner =
-                                        *map.get(&(h, (card1, card2), k, j)).expect("not set");
+                                    let winner = winners.get_winner(
+                                        h_bucket,
+                                        i,
+                                        k as usize,
+                                        j as usize,
+                                        self.player,
+                                    );
                                     let amount = g.get_win_amount(u);
                                     if winner == 1 {
                                         ev += amount as f32 * p * chance
@@ -505,7 +525,7 @@ impl BestResponse {
         } else if hand == None {
             let mut v = 0.0;
             for i in 0..self.range.len() {
-                v += self.compute_best_response(u, g, strat, Some(i), None, None, map);
+                v += self.compute_best_response(u, g, strat, Some(i), None, None, winners);
             }
             return v;
         } else if g.get_round(u) == 1 && turn == None {
@@ -522,8 +542,15 @@ impl BestResponse {
                 {
                     continue;
                 }
-                v +=
-                    self.compute_best_response(u, g, strat, hand, Some((t, i as usize)), None, map);
+                v += self.compute_best_response(
+                    u,
+                    g,
+                    strat,
+                    hand,
+                    Some((t, i as usize)),
+                    None,
+                    winners,
+                );
                 t += 1;
             }
             return v;
@@ -544,8 +571,15 @@ impl BestResponse {
                 {
                     continue;
                 }
-                v +=
-                    self.compute_best_response(u, g, strat, hand, turn, Some((r, i as usize)), map);
+                v += self.compute_best_response(
+                    u,
+                    g,
+                    strat,
+                    hand,
+                    turn,
+                    Some((r, i as usize)),
+                    winners,
+                );
                 r += 1;
             }
             return v;
@@ -561,7 +595,7 @@ impl BestResponse {
                         hand,
                         turn,
                         river,
-                        map,
+                        winners,
                     );
                     if v > max_val {
                         max_val = v;
@@ -594,7 +628,7 @@ impl BestResponse {
                         hand,
                         turn,
                         river,
-                        map,
+                        winners,
                     );
                 }
             }

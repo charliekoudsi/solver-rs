@@ -313,6 +313,7 @@ pub unsafe fn update_regret(
                 ev[1] = STARTING_POT as f32 / 2.0 * reach[0] * chance;
             }
         }
+        // This has a massive performance impact (~5-10x)
     } else if reach[0] < 1e-15 && reach[1] < 1e-15 {
         ev[0] = 0.0;
         ev[1] = 0.0;

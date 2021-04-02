@@ -3,13 +3,15 @@ mod best_response;
 mod constants;
 mod game;
 mod regret;
+mod winners;
 use best_response::BestResponse;
-use constants::{NO_DONK, NUM_CARDS};
+use constants::{NO_DONK, NUM_CARDS, RIVER_CARDS, TURN_CARDS};
 use game::{evaluate_winner, get_buckets, Game};
 use rand::{seq::SliceRandom, thread_rng};
 use regret::{update_regret, RegretStrategy, SafeRegretStrategy};
 use rs_poker::{gen_ranges, Card, Isomorph};
-use std::{collections::HashMap, convert::TryInto, mem::transmute, time::Instant};
+use std::{collections::HashMap, convert::TryInto, mem::size_of_val, time::Instant};
+use winners::Winners;
 
 fn gen_range_cards(len: usize) -> Vec<usize> {
     let mut r = vec![0; len];
@@ -27,22 +29,15 @@ fn single_thread_train(
     range2: &Vec<(u8, u8)>,
     min_i: usize,
     max_i: usize,
-    map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
+    winners: &Winners,
 ) -> ([f32; 2], usize) {
     let mut global_ev = [0.0; 2];
     let mut combos = 0;
     let mut rng = thread_rng();
-    let mut turn_cards = [
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-        48, 49, 50, 51,
-    ];
-    let mut river_cards = [
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-        48, 49, 50, 51,
-    ];
     let mut p2_range_cards = gen_range_cards(range2.len());
+    let mut turn_cards = TURN_CARDS.clone();
+    let mut river_cards = RIVER_CARDS.clone();
+    let mut board = [flop[0], flop[1], flop[2], 0, 0];
     for i in min_i..max_i {
         let (p1_one, p1_two) = range1[i];
         p2_range_cards.shuffle(&mut rng);
@@ -83,26 +78,13 @@ fn single_thread_train(
                         [i, i * 47 + p1_turn, (i * 47 + p1_turn) * 46 + p1_river],
                         [*j, *j * 47 + p2_turn, (*j * 47 + p2_turn) * 46 + p2_river],
                     ];
-                    let result = map.get(&((p1_one, p1_two), (p2_one, p2_two), turn, river));
-                    if result == None {
-                        panic!(
-                            "({},{}) ({},{}) & {}, {}",
-                            p1_one, p1_two, p2_one, p2_two, turn, river
-                        );
-                    }
+                    board[3] = turn;
+                    board[4] = river;
+                    let result = winners.get_winner(i, *j, turn as usize, river as usize, 0);
                     let mut ev = [0.0; 2];
                     let mut reach = [1.0; 2];
                     unsafe {
-                        update_regret(
-                            0,
-                            &buckets,
-                            *result.unwrap(),
-                            &mut reach,
-                            1.0,
-                            &mut ev,
-                            strat,
-                            g,
-                        );
+                        update_regret(0, &buckets, result, &mut reach, 1.0, &mut ev, strat, g);
                     }
                     global_ev[0] += ev[0];
                     global_ev[1] += ev[1];
@@ -123,13 +105,22 @@ fn train_4(
     flop: &[u8; 3],
     range1: &Vec<(u8, u8)>,
     range2: &Vec<(u8, u8)>,
-    map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
+    winners: &Winners,
 ) -> (f32, [f32; 2]) {
     let start = Instant::now();
     // let combos = range1.len();
     let v = crossbeam::scope(|scope| {
         let a = scope.spawn(move |_| {
-            return single_thread_train(g, strat_1, flop, range1, range2, 0, range1.len() / 4, map);
+            return single_thread_train(
+                g,
+                strat_1,
+                flop,
+                range1,
+                range2,
+                0,
+                range1.len() / 4,
+                winners,
+            );
         });
         let b = scope.spawn(move |_| {
             return single_thread_train(
@@ -140,7 +131,7 @@ fn train_4(
                 range2,
                 range1.len() / 4,
                 range1.len() / 2,
-                map,
+                winners,
             );
         });
         let c = scope.spawn(move |_| {
@@ -152,7 +143,7 @@ fn train_4(
                 range2,
                 range1.len() / 2,
                 range1.len() * 3 / 4,
-                map,
+                winners,
             );
         });
         let d = single_thread_train(
@@ -163,7 +154,7 @@ fn train_4(
             range2,
             range1.len() * 3 / 4,
             range1.len(),
-            map,
+            winners,
         );
         let a = a.join().unwrap();
         let b = b.join().unwrap();
@@ -192,13 +183,22 @@ fn train_8(
     flop: &[u8; 3],
     range1: &Vec<(u8, u8)>,
     range2: &Vec<(u8, u8)>,
-    map: &HashMap<((u8, u8), (u8, u8), u8, u8), i8>,
+    winners: &Winners,
 ) -> (f32, [f32; 2]) {
     let start = Instant::now();
     // let combos = range1.len();
     let v = crossbeam::scope(|scope| {
         let a = scope.spawn(move |_| {
-            return single_thread_train(g, strat_1, flop, range1, range2, 0, range1.len() / 4, map);
+            return single_thread_train(
+                g,
+                strat_1,
+                flop,
+                range1,
+                range2,
+                0,
+                range1.len() / 8,
+                winners,
+            );
         });
         let b = scope.spawn(move |_| {
             return single_thread_train(
@@ -209,7 +209,7 @@ fn train_8(
                 range2,
                 range1.len() / 8,
                 range1.len() / 4,
-                map,
+                winners,
             );
         });
         let c = scope.spawn(move |_| {
@@ -221,7 +221,7 @@ fn train_8(
                 range2,
                 range1.len() / 4,
                 range1.len() * 3 / 8,
-                map,
+                winners,
             );
         });
         let d = scope.spawn(move |_| {
@@ -233,7 +233,7 @@ fn train_8(
                 range2,
                 range1.len() * 3 / 8,
                 range1.len() / 2,
-                map,
+                winners,
             );
         });
         let e = scope.spawn(move |_| {
@@ -245,7 +245,7 @@ fn train_8(
                 range2,
                 range1.len() / 2,
                 range1.len() * 5 / 8,
-                map,
+                winners,
             );
         });
         let f = scope.spawn(move |_| {
@@ -257,7 +257,7 @@ fn train_8(
                 range2,
                 range1.len() * 5 / 8,
                 range1.len() * 3 / 4,
-                map,
+                winners,
             );
         });
         let g_t = scope.spawn(move |_| {
@@ -269,7 +269,7 @@ fn train_8(
                 range2,
                 range1.len() * 3 / 4,
                 range1.len() * 7 / 8,
-                map,
+                winners,
             );
         });
         let h = single_thread_train(
@@ -280,7 +280,7 @@ fn train_8(
             range2,
             range1.len() * 7 / 8,
             range1.len(),
-            map,
+            winners,
         );
         let a = a.join().unwrap();
         let b = b.join().unwrap();
@@ -306,6 +306,189 @@ fn main() {
     let g = Game::new();
     println!("{:?}", g.transition[0]);
     let flop = [18, 31, 35];
+    let btn = [
+        Isomorph::new_from_str("AA").unwrap(),
+        Isomorph::new_from_str("AKs").unwrap(),
+        Isomorph::new_from_str("AQs").unwrap(),
+        Isomorph::new_from_str("AJs").unwrap(),
+        Isomorph::new_from_str("ATs").unwrap(),
+        Isomorph::new_from_str("A9s").unwrap(),
+        Isomorph::new_from_str("A8s").unwrap(),
+        Isomorph::new_from_str("A7s").unwrap(),
+        Isomorph::new_from_str("A6s").unwrap(),
+        Isomorph::new_from_str("A5s").unwrap(),
+        Isomorph::new_from_str("A4s").unwrap(),
+        Isomorph::new_from_str("A3s").unwrap(),
+        Isomorph::new_from_str("A2s").unwrap(),
+        Isomorph::new_from_str("AKo").unwrap(),
+        Isomorph::new_from_str("AQo").unwrap(),
+        Isomorph::new_from_str("AJo").unwrap(),
+        Isomorph::new_from_str("ATo").unwrap(),
+        Isomorph::new_from_str("A9o").unwrap(),
+        Isomorph::new_from_str("A8o").unwrap(),
+        Isomorph::new_from_str("A7o").unwrap(),
+        Isomorph::new_from_str("A6o").unwrap(),
+        Isomorph::new_from_str("A5o").unwrap(),
+        Isomorph::new_from_str("A4o").unwrap(),
+        Isomorph::new_from_str("KK").unwrap(),
+        Isomorph::new_from_str("KQs").unwrap(),
+        Isomorph::new_from_str("KJs").unwrap(),
+        Isomorph::new_from_str("KTs").unwrap(),
+        Isomorph::new_from_str("K9s").unwrap(),
+        Isomorph::new_from_str("K8s").unwrap(),
+        Isomorph::new_from_str("K7s").unwrap(),
+        Isomorph::new_from_str("K6s").unwrap(),
+        Isomorph::new_from_str("K5s").unwrap(),
+        Isomorph::new_from_str("K4s").unwrap(),
+        Isomorph::new_from_str("K3s").unwrap(),
+        Isomorph::new_from_str("K2s").unwrap(),
+        Isomorph::new_from_str("KQo").unwrap(),
+        Isomorph::new_from_str("KJo").unwrap(),
+        Isomorph::new_from_str("KTo").unwrap(),
+        Isomorph::new_from_str("K9o").unwrap(),
+        Isomorph::new_from_str("K8o").unwrap(),
+        Isomorph::new_from_str("QQ").unwrap(),
+        Isomorph::new_from_str("QJs").unwrap(),
+        Isomorph::new_from_str("QTs").unwrap(),
+        Isomorph::new_from_str("Q9s").unwrap(),
+        Isomorph::new_from_str("Q8s").unwrap(),
+        Isomorph::new_from_str("Q7s").unwrap(),
+        Isomorph::new_from_str("Q6s").unwrap(),
+        Isomorph::new_from_str("Q5s").unwrap(),
+        Isomorph::new_from_str("Q4s").unwrap(),
+        Isomorph::new_from_str("Q3s").unwrap(),
+        Isomorph::new_from_str("Q2s").unwrap(),
+        Isomorph::new_from_str("QJo").unwrap(),
+        Isomorph::new_from_str("QTo").unwrap(),
+        Isomorph::new_from_str("Q9o").unwrap(),
+        Isomorph::new_from_str("JJ").unwrap(),
+        Isomorph::new_from_str("JTs").unwrap(),
+        Isomorph::new_from_str("J9s").unwrap(),
+        Isomorph::new_from_str("J8s").unwrap(),
+        Isomorph::new_from_str("J7s").unwrap(),
+        Isomorph::new_from_str("J6s").unwrap(),
+        Isomorph::new_from_str("J5s").unwrap(),
+        Isomorph::new_from_str("J4s").unwrap(),
+        Isomorph::new_from_str("JTo").unwrap(),
+        Isomorph::new_from_str("J9o").unwrap(),
+        Isomorph::new_from_str("J8o").unwrap(),
+        Isomorph::new_from_str("TT").unwrap(),
+        Isomorph::new_from_str("T9s").unwrap(),
+        Isomorph::new_from_str("T8s").unwrap(),
+        Isomorph::new_from_str("T7s").unwrap(),
+        Isomorph::new_from_str("T6s").unwrap(),
+        Isomorph::new_from_str("T9o").unwrap(),
+        Isomorph::new_from_str("T8o").unwrap(),
+        Isomorph::new_from_str("99").unwrap(),
+        Isomorph::new_from_str("98s").unwrap(),
+        Isomorph::new_from_str("97s").unwrap(),
+        Isomorph::new_from_str("96s").unwrap(),
+        Isomorph::new_from_str("98o").unwrap(),
+        Isomorph::new_from_str("88").unwrap(),
+        Isomorph::new_from_str("87s").unwrap(),
+        Isomorph::new_from_str("86s").unwrap(),
+        Isomorph::new_from_str("77").unwrap(),
+        Isomorph::new_from_str("76s").unwrap(),
+        Isomorph::new_from_str("75s").unwrap(),
+        Isomorph::new_from_str("66").unwrap(),
+        Isomorph::new_from_str("65s").unwrap(),
+        Isomorph::new_from_str("55").unwrap(),
+        Isomorph::new_from_str("54s").unwrap(),
+        Isomorph::new_from_str("44").unwrap(),
+        Isomorph::new_from_str("33").unwrap(),
+        Isomorph::new_from_str("22").unwrap(),
+    ];
+    let bb = [
+        Isomorph::new_from_str("AJs").unwrap(),
+        Isomorph::new_from_str("ATs").unwrap(),
+        Isomorph::new_from_str("A9s").unwrap(),
+        Isomorph::new_from_str("A8s").unwrap(),
+        Isomorph::new_from_str("A7s").unwrap(),
+        Isomorph::new_from_str("A6s").unwrap(),
+        Isomorph::new_from_str("A5s").unwrap(),
+        Isomorph::new_from_str("A4s").unwrap(),
+        Isomorph::new_from_str("A3s").unwrap(),
+        Isomorph::new_from_str("A2s").unwrap(),
+        Isomorph::new_from_str("AQo").unwrap(),
+        Isomorph::new_from_str("AJo").unwrap(),
+        Isomorph::new_from_str("ATo").unwrap(),
+        Isomorph::new_from_str("A9o").unwrap(),
+        Isomorph::new_from_str("A8o").unwrap(),
+        Isomorph::new_from_str("A7o").unwrap(),
+        Isomorph::new_from_str("A6o").unwrap(),
+        Isomorph::new_from_str("A5o").unwrap(),
+        Isomorph::new_from_str("A4o").unwrap(),
+        Isomorph::new_from_str("KQs").unwrap(),
+        Isomorph::new_from_str("KJs").unwrap(),
+        Isomorph::new_from_str("KTs").unwrap(),
+        Isomorph::new_from_str("K9s").unwrap(),
+        Isomorph::new_from_str("K8s").unwrap(),
+        Isomorph::new_from_str("K7s").unwrap(),
+        Isomorph::new_from_str("K6s").unwrap(),
+        Isomorph::new_from_str("K5s").unwrap(),
+        Isomorph::new_from_str("K4s").unwrap(),
+        Isomorph::new_from_str("K3s").unwrap(),
+        Isomorph::new_from_str("K2s").unwrap(),
+        Isomorph::new_from_str("KQo").unwrap(),
+        Isomorph::new_from_str("KJo").unwrap(),
+        Isomorph::new_from_str("KTo").unwrap(),
+        Isomorph::new_from_str("K9o").unwrap(),
+        Isomorph::new_from_str("K8o").unwrap(),
+        Isomorph::new_from_str("QJs").unwrap(),
+        Isomorph::new_from_str("QTs").unwrap(),
+        Isomorph::new_from_str("Q9s").unwrap(),
+        Isomorph::new_from_str("Q8s").unwrap(),
+        Isomorph::new_from_str("Q7s").unwrap(),
+        Isomorph::new_from_str("Q6s").unwrap(),
+        Isomorph::new_from_str("Q5s").unwrap(),
+        Isomorph::new_from_str("Q4s").unwrap(),
+        Isomorph::new_from_str("Q3s").unwrap(),
+        Isomorph::new_from_str("Q2s").unwrap(),
+        Isomorph::new_from_str("QJo").unwrap(),
+        Isomorph::new_from_str("QTo").unwrap(),
+        Isomorph::new_from_str("Q9o").unwrap(),
+        Isomorph::new_from_str("J8s").unwrap(),
+        Isomorph::new_from_str("J7s").unwrap(),
+        Isomorph::new_from_str("J6s").unwrap(),
+        Isomorph::new_from_str("J5s").unwrap(),
+        Isomorph::new_from_str("J4s").unwrap(),
+        Isomorph::new_from_str("JTo").unwrap(),
+        Isomorph::new_from_str("J9o").unwrap(),
+        Isomorph::new_from_str("T8s").unwrap(),
+        Isomorph::new_from_str("T7s").unwrap(),
+        Isomorph::new_from_str("T6s").unwrap(),
+        Isomorph::new_from_str("T9o").unwrap(),
+        Isomorph::new_from_str("T8o").unwrap(),
+        Isomorph::new_from_str("99").unwrap(),
+        Isomorph::new_from_str("98s").unwrap(),
+        Isomorph::new_from_str("97s").unwrap(),
+        Isomorph::new_from_str("96s").unwrap(),
+        Isomorph::new_from_str("98o").unwrap(),
+        Isomorph::new_from_str("88").unwrap(),
+        Isomorph::new_from_str("87s").unwrap(),
+        Isomorph::new_from_str("86s").unwrap(),
+        Isomorph::new_from_str("85s").unwrap(),
+        Isomorph::new_from_str("87o").unwrap(),
+        Isomorph::new_from_str("77").unwrap(),
+        Isomorph::new_from_str("76s").unwrap(),
+        Isomorph::new_from_str("75s").unwrap(),
+        Isomorph::new_from_str("74s").unwrap(),
+        Isomorph::new_from_str("76o").unwrap(),
+        Isomorph::new_from_str("66").unwrap(),
+        Isomorph::new_from_str("65s").unwrap(),
+        Isomorph::new_from_str("64s").unwrap(),
+        Isomorph::new_from_str("63s").unwrap(),
+        Isomorph::new_from_str("65o").unwrap(),
+        Isomorph::new_from_str("55").unwrap(),
+        Isomorph::new_from_str("54s").unwrap(),
+        Isomorph::new_from_str("53s").unwrap(),
+        Isomorph::new_from_str("52s").unwrap(),
+        Isomorph::new_from_str("44").unwrap(),
+        Isomorph::new_from_str("43s").unwrap(),
+        Isomorph::new_from_str("42s").unwrap(),
+        Isomorph::new_from_str("33").unwrap(),
+        Isomorph::new_from_str("22").unwrap(),
+    ];
     let combos = [
         Isomorph::new(12, 12, false),
         Isomorph::new(12, 11, true),
@@ -321,8 +504,13 @@ fn main() {
         Isomorph::new(8, 7, true),
         Isomorph::new(6, 5, true),
     ];
-    let range1 = gen_ranges(&combos, &flop);
-    let range2 = gen_ranges(&combos, &flop);
+    let range1 = gen_ranges(&bb, &flop);
+    let range2 = gen_ranges(&btn, &flop);
+
+    println!("generating map");
+    let time = Instant::now();
+    let map = Winners::new(&range1, &range2, &flop);
+    println!("elapsed: {}", time.elapsed().as_secs_f32());
     let mut safe_1 = SafeRegretStrategy::new(&g, 0, range1.len());
     let mut safe_2 = SafeRegretStrategy::new(&g, 1, range2.len());
     // let regret_1 = RegretStrategy::new(
@@ -339,47 +527,6 @@ fn main() {
     // let mut strat_2 = [regret_1.1, regret_2.1];
     // let mut strat_3 = [regret_1.2, regret_2.2];
     // let mut strat_4 = [regret_1.3, regret_2.3];
-    let mut total = 0.0;
-    let mut map: HashMap<((u8, u8), (u8, u8), u8, u8), i8> = HashMap::new();
-    let mut board = [flop[0], flop[1], flop[2], 0, 0];
-    for hand1 in range1.iter() {
-        for hand2 in range2.iter() {
-            if hand1.0 == hand2.0 || hand1.0 == hand2.1 || hand1.1 == hand2.0 || hand1.1 == hand2.1
-            {
-                continue;
-            }
-            for turn in 0..NUM_CARDS {
-                if hand1.0 == turn
-                    || hand1.1 == turn
-                    || hand2.0 == turn
-                    || hand2.1 == turn
-                    || flop[0] == turn
-                    || flop[1] == turn
-                    || flop[2] == turn
-                {
-                    continue;
-                }
-                for river in 0..NUM_CARDS {
-                    if turn == river
-                        || hand1.0 == river
-                        || hand1.1 == river
-                        || hand2.0 == river
-                        || hand2.1 == river
-                        || flop[0] == river
-                        || flop[1] == river
-                        || flop[2] == river
-                    {
-                        continue;
-                    }
-                    board[3] = turn;
-                    board[4] = river;
-                    let winner = evaluate_winner(*hand1, *hand2, &board);
-                    map.insert((*hand1, *hand2, turn, river), winner);
-                    map.insert((*hand2, *hand1, turn, river), -1 * winner);
-                }
-            }
-        }
-    }
     let mut dEV = 100.0;
     let mut runs = 0;
     // while dEV > 0.5 {
@@ -403,7 +550,9 @@ fn main() {
     let mut strat_6 = [regret_1.5, regret_2.5];
     let mut strat_7 = [regret_1.6, regret_2.6];
     let mut strat_8 = [regret_1.7, regret_2.7];
-    while total < 600.0 {
+    println!("starting training");
+    let mut total = 0.0;
+    while total < 2000.0 {
         let (time, run_ev) = train_8(
             &g,
             &mut strat_1,
@@ -425,39 +574,34 @@ fn main() {
         ev = run_ev[0] + run_ev[1];
         runs += 1;
     }
-    // for i in 0..10000 {
-    // }
-    // }
+
     let mut best_resp_strat = SafeRegretStrategy::new(&g, 0, range1.len());
     let best_resp = BestResponse::new(0, &safe_2, &g, range1.clone(), range2.clone(), flop.clone());
     println!("computing br");
     let time = Instant::now();
     let mut val =
         best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
-    // println!("{} ({})", val, time.elapsed().as_secs_f32());
 
+    println!("{} ({})", val, time.elapsed().as_secs_f32());
     let mut best_resp_strat = SafeRegretStrategy::new(&g, 1, range2.len());
     let best_resp = BestResponse::new(1, &safe_1, &g, range2.clone(), range1.clone(), flop.clone());
     let new_val =
         best_resp.compute_best_response(0, &g, &mut best_resp_strat, None, None, None, &map);
     println!("[{}, {}]", val, new_val);
     val += new_val;
-    // println!("{} ({})", val, time.elapsed().as_secs_f32());
+    println!("{} ({})", val, time.elapsed().as_secs_f32());
     dEV = 100.0 * (val - ev) / val;
-    println!("dEV: {}, Elapsed: {}", dEV, time.elapsed().as_secs_f32());
-    // }
+    let exploitability = (val - ev) / 4.0;
+    println!(
+        "dEV: {}, Exploitability:  {}, Elapsed: {}",
+        dEV,
+        exploitability,
+        time.elapsed().as_secs_f32()
+    );
     let mut i = 0;
-    for (c1, c2) in &range1 {
+    for (c1, c2) in &range2 {
         let card1 = Card::from_u8(*c1);
         let card2 = Card::from_u8(*c2);
-        println!(
-            "P1 Open {}{}{}{}: {:?}",
-            card1.value.to_char(),
-            card1.suit.to_char(),
-            card2.value.to_char(),
-            card2.suit.to_char(),
-            safe_1.get_average_normalized_probability(0, i, &g)
-        );
         println!(
             "P2 vs. Check {}{}{}{}: {:?}",
             card1.value.to_char(),
