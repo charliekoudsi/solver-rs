@@ -1,5 +1,6 @@
 use crate::constants::NUM_CARDS;
 use crate::game::evaluate_winner;
+use crossbeam_utils::thread as crossbeam;
 
 type Range = Vec<(u8, u8)>;
 

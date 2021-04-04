@@ -10,7 +10,7 @@ edition = "2018"
 rs_poker = { git = "https://github.com/charliekoudsi/rs-poker" }
 # serde = {version="1.0.119", features = ["derive"]}
 # bincode = "1.3.1"
-crossbeam = "0.8.0"
+crossbeam-utils = "0.8.0"
 rand = "0.8.3"
 array-init = "1.0.0"
 

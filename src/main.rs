@@ -6,6 +6,7 @@ mod regret;
 mod winners;
 use best_response::BestResponse;
 use constants::{NO_DONK, NUM_CARDS, RIVER_CARDS, TURN_CARDS};
+use crossbeam_utils::thread as crossbeam;
 use game::{evaluate_winner, get_buckets, Game};
 use rand::{seq::SliceRandom, thread_rng};
 use regret::{update_regret, RegretStrategy, SafeRegretStrategy};
@@ -504,8 +505,8 @@ fn main() {
         Isomorph::new(8, 7, true),
         Isomorph::new(6, 5, true),
     ];
-    let range1 = gen_ranges(&bb, &flop);
-    let range2 = gen_ranges(&btn, &flop);
+    let range1 = gen_ranges(&combos, &flop);
+    let range2 = gen_ranges(&combos, &flop);
 
     println!("generating map");
     let time = Instant::now();
