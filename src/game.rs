@@ -1,5 +1,5 @@
 use crate::constants::*;
-use rs_poker::{Hand, Rankable};
+use rs_poker::{Hand, Rank, Rankable};
 
 pub struct Game {
     pub rounds: [usize; NUM_INTERNAL],
@@ -400,6 +400,11 @@ fn construct_sequences<const P1: usize, const P2: usize>(
     }
 
     return u;
+}
+
+#[inline(always)]
+pub fn get_rank(c1: u8, c2: u8, board: &[u8; 5]) -> Rank {
+    return Hand::new_with_u8(c1, c2, board).rank();
 }
 
 #[inline(always)]

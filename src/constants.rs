@@ -1,3 +1,4 @@
+pub const COMBOS: usize = 1326;
 pub const STARTING_STACK: usize = 195;
 pub const STARTING_POT: usize = 11;
 pub const NO_DONK: bool = true;
@@ -19,6 +20,7 @@ pub const RIVER_CARDS: [u8; 52] = [
     26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
     50, 51,
 ];
+pub const HOLES: [(u8, u8); COMBOS] = get_holes();
 
 const fn get_sequences(pot: usize, stack: usize) -> (usize, usize) {
     let mut internal = 0;
@@ -217,4 +219,22 @@ const fn count_sequences<const P1: usize, const P2: usize>(
     if raise != 0 {
         *terminal += 1;
     }
+}
+
+const fn get_holes() -> [(u8, u8); COMBOS] {
+    let mut holes = [(0, 0); COMBOS];
+
+    let mut i = 0;
+    let mut idx = 0;
+    while i < NUM_CARDS {
+        let mut j = i + 1;
+        while j < NUM_CARDS {
+            holes[idx] = (i, j);
+            idx += 1;
+            j += 1;
+        }
+        i += 1;
+    }
+
+    return holes;
 }

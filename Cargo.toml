@@ -13,6 +13,7 @@ rs_poker = { git = "https://github.com/charliekoudsi/rs-poker" }
 crossbeam-utils = "0.8.0"
 rand = "0.8.3"
 array-init = "1.0.0"
+ndarray = "0.15.1"
 
 [profile.release]
 debug = true
