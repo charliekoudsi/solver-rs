@@ -7,10 +7,10 @@ mod regret;
 mod terminal;
 mod winners;
 // use best_response::BestResponse;
-use constants::{COMBOS, NO_DONK, NUM_CARDS, RIVER_CARDS, TURN_CARDS};
+use constants::{Array1, COMBOS, NO_DONK, NUM_CARDS, RIVER_CARDS, TURN_CARDS};
 use crossbeam_utils::thread as crossbeam;
 use game::{evaluate_winner, get_buckets, Game};
-use ndarray::{arr1, array, Array1, Array2, ArrayBase, Dim, OwnedRepr};
+// use ndarray::{arr1, array, Array1, Array2, ArrayBase, Dim, OwnedRepr};
 use rand::{seq::SliceRandom, thread_rng};
 use regret::{train, update_regret, RegretStrategy, SafeRegretStrategy};
 use rs_poker::{gen_ranges, Card, Isomorph};
@@ -533,7 +533,7 @@ fn main() {
         Isomorph::new(6, 5, true),
     ];
     let range1 = gen_ranges(&combos, &flop);
-    let mut chance1 = Array1::<f32>::zeros(COMBOS);
+    let mut chance1 = Array1::zeros();
     let len = range1.len() as f32;
     for (c1, c2) in range1 {
         chance1[get_index(c1, c2)] = 1.0;
@@ -577,7 +577,7 @@ fn main() {
     for i in 0..52 {
         for j in (i + 1)..52 {
             if chance[1][idx] != 0.0 {
-                let prob = [avg[[0, idx]], avg[[1, idx]], avg[[2, idx]]];
+                let prob = [avg[(idx, 0)], avg[(idx, 1)], avg[(idx, 2)]];
                 let c1 = Card::from_u8(i);
                 let c2 = Card::from_u8(j);
                 println!(

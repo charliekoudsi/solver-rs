@@ -1,3 +1,8 @@
+use nalgebra::{SMatrix, SVector};
+
+pub type Array1 = SVector<f32, COMBOS>;
+pub type Array2 = SMatrix<f32, COMBOS, TOTAL_ACTIONS>;
+
 pub const COMBOS: usize = 1326;
 pub const STARTING_STACK: usize = 195;
 pub const STARTING_POT: usize = 11;

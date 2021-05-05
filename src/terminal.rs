@@ -1,9 +1,10 @@
-use crate::constants::{COMBOS, HOLES, STARTING_POT};
+use crate::constants::{Array1, COMBOS, HOLES, STARTING_POT};
 use crate::game::get_rank;
-use ndarray::Array1;
+use nalgebra::{SVector, Scalar};
 use rs_poker::Rank;
 
-#[derive(Debug)]
+// Maybe: use SoA instead where each Array can be an Array1
+#[derive(Debug, PartialEq, Clone)]
 pub struct RankedHand {
     c1: u8,
     c2: u8,
@@ -30,8 +31,12 @@ impl RankedHand {
     }
 }
 
+impl Scalar for RankedHand {}
+
+pub type RankedArray = SVector<RankedHand, COMBOS>;
+
 // I'm not sure I actually need all possible combos
-pub fn rank_board(board: &[u8; 5]) -> Array1<RankedHand> {
+pub fn rank_board(board: &[u8; 5]) -> RankedArray {
     let mut ranks = Vec::with_capacity(COMBOS);
     let mut idx = 0;
     for i in 0..52 {
@@ -55,13 +60,13 @@ pub fn rank_board(board: &[u8; 5]) -> Array1<RankedHand> {
         }
     }
     ranks.sort_unstable_by(|r1, r2| r1.rank.cmp(&r2.rank));
-    return Array1::from_vec(ranks);
+    return RankedArray::from_vec(ranks);
 }
 
 pub fn get_index(card1: u8, card2: u8) -> usize {
     (0..52).rev().take(card1 as usize).fold(0, |a, b| a + b) + (card2 - card1) as usize - 1
-    // Test:
 
+    // Test:
     // let mut idx = 0;
     // for i in 0..52 {
     //     for j in (i + 1)..52 {
@@ -71,17 +76,12 @@ pub fn get_index(card1: u8, card2: u8) -> usize {
     // }
 }
 
-pub fn eval_showdown(
-    sd_value: f32,
-    hands: &Array1<RankedHand>,
-    opp_probs: &Array1<f32>,
-) -> Array1<f32> {
-    debug_assert_eq!(hands.len(), opp_probs.len());
-    let num_hands = hands.len();
+pub fn eval_showdown(sd_value: f32, hands: &RankedArray, opp_probs: &Array1) -> Array1 {
+    let num_hands = COMBOS;
     let mut sum: f32 = 0.0;
     let mut i = 0;
     let mut sum_including_card: [f32; 52] = [0.0; 52];
-    let mut result: Array1<f32> = Array1::zeros(num_hands);
+    let mut result: Array1 = Array1::zeros();
     for k in 0..num_hands {
         if opp_probs[hands[k].index] > 0.0 {
             sum_including_card[hands[k].c1 as usize] -= opp_probs[hands[k].index];
@@ -126,8 +126,8 @@ pub fn eval_showdown(
     return result;
 }
 
-pub fn eval_fold(sd_value: f32, opp_probs: &Array1<f32>) -> Array1<f32> {
-    let mut result: Array1<f32> = Array1::zeros(COMBOS);
+pub fn eval_fold(sd_value: f32, opp_probs: &Array1) -> Array1 {
+    let mut result: Array1 = Array1::zeros();
     let mut sum: f32 = 0.0;
     let mut sum_including_card: [f32; 52] = [0.0; 52];
 
