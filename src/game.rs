@@ -42,6 +42,8 @@ impl Game {
             &mut terminal,
             &P1_SIZES,
             &P2_SIZES,
+            &P1_RAISES,
+            &P2_RAISES,
             NO_DONK,
             Some(AGGRESSOR),
             0,
@@ -116,7 +118,12 @@ impl Game {
     }
 }
 
-fn construct_sequences<const P1: usize, const P2: usize>(
+fn construct_sequences<
+    const P1: usize,
+    const P2: usize,
+    const P1_RAISES: usize,
+    const P2_RAISES: usize,
+>(
     player: usize,
     round: usize,
     raise: usize,
@@ -134,6 +141,8 @@ fn construct_sequences<const P1: usize, const P2: usize>(
     terminal: &mut usize,
     p1_sizes: &[[(usize, usize); P1]; 3],
     p2_sizes: &[[(usize, usize); P2]; 3],
+    p1_raises: &[(usize, usize); P1_RAISES],
+    p2_raises: &[(usize, usize); P2_RAISES],
     no_donk: bool,
     aggressor: Option<usize>,
     num_bets: usize,
@@ -163,8 +172,21 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                 }
             };
             let mut i = 0;
-            while i < P1 && !halted {
-                let size = p1_sizes[round][i];
+            let cap = {
+                if num_bets == 0 {
+                    P1
+                } else {
+                    P1_RAISES
+                }
+            };
+            while i < cap && !halted {
+                let size = {
+                    if num_bets == 0 {
+                        p1_sizes[round][i]
+                    } else {
+                        p1_raises[i]
+                    }
+                };
                 let raise_size = (pot + raise) * size.0 / size.1;
                 if stack > raise_size {
                     num_actions[u] += 1;
@@ -186,6 +208,8 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                         terminal,
                         p1_sizes,
                         p2_sizes,
+                        p1_raises,
+                        p2_raises,
                         no_donk,
                         Some(player),
                         num_bets + 1,
@@ -197,7 +221,7 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                     break;
                 }
             }
-            if i < P1 && !halted {
+            if i < cap && !halted {
                 num_actions[u] += 1;
                 let v = construct_sequences(
                     opponent,
@@ -217,6 +241,8 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                     terminal,
                     p1_sizes,
                     p2_sizes,
+                    p1_raises,
+                    p2_raises,
                     no_donk,
                     Some(player),
                     num_bets + 1,
@@ -226,8 +252,21 @@ fn construct_sequences<const P1: usize, const P2: usize>(
             }
         } else {
             let mut i = 0;
-            while i < P2 {
-                let size = p2_sizes[round][i];
+            let cap = {
+                if num_bets == 0 {
+                    P2
+                } else {
+                    P2_RAISES
+                }
+            };
+            while i < cap {
+                let size = {
+                    if num_bets == 0 {
+                        p2_sizes[round][i]
+                    } else {
+                        p2_raises[i]
+                    }
+                };
                 let raise_size = (pot + raise) * size.0 / size.1;
                 if stack > raise_size {
                     num_actions[u] += 1;
@@ -249,6 +288,8 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                         terminal,
                         p1_sizes,
                         p2_sizes,
+                        p1_raises,
+                        p2_raises,
                         no_donk,
                         Some(player),
                         num_bets + 1,
@@ -260,7 +301,7 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                     break;
                 }
             }
-            if i < P2 {
+            if i < cap {
                 num_actions[u] += 1;
                 let v = construct_sequences(
                     opponent,
@@ -280,6 +321,8 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                     terminal,
                     p1_sizes,
                     p2_sizes,
+                    p1_raises,
+                    p2_raises,
                     no_donk,
                     Some(player),
                     num_bets + 1,
@@ -309,6 +352,8 @@ fn construct_sequences<const P1: usize, const P2: usize>(
             terminal,
             p1_sizes,
             p2_sizes,
+            p1_raises,
+            p2_raises,
             no_donk,
             aggressor,
             num_bets,
@@ -344,6 +389,8 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                         terminal,
                         p1_sizes,
                         p2_sizes,
+                        p1_raises,
+                        p2_raises,
                         no_donk,
                         None,
                         0,
@@ -369,6 +416,8 @@ fn construct_sequences<const P1: usize, const P2: usize>(
                         terminal,
                         p1_sizes,
                         p2_sizes,
+                        p1_raises,
+                        p2_raises,
                         no_donk,
                         Some(opponent),
                         0,
